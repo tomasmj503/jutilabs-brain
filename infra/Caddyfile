@@ -1,0 +1,24 @@
+# TLS automático (Let's Encrypt). Requiere DNS A de los 3 subdominios → IP del CX32 y dominio vigente.
+{
+  email admin@jutilabs.com
+}
+
+chat.jutilabs.com {
+  reverse_proxy chatwoot-rails:3000
+  encode gzip
+}
+
+n8n.jutilabs.com {
+  reverse_proxy n8n:5678
+}
+
+api.jutilabs.com {
+  # Solo lo necesario expuesto. Todo lo demás → 404.
+  @permitido path /health /webhook/*
+  handle @permitido {
+    reverse_proxy brain:8080
+  }
+  handle {
+    respond 404
+  }
+}

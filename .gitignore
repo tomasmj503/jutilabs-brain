@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+infra/.env
+infra/.env.*
+!infra/.env.example
+!infra/.env.chatwoot.example
+*.log
+.DS_Store
+coverage/

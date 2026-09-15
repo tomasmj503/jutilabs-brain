@@ -1,0 +1,102 @@
+# .clinerules — jutilabs-brain (JUTILABS)
+
+## Qué es este repo
+Servicio TypeScript `jutilabs-brain`: cerebro conversacional multi-cliente para
+WhatsApp y chat web vía Chatwoot. Cliente 1: Mandala Yoga Hostel. Todo se diseña
+para el cliente 2. Fuente de verdad del proyecto: página de Notion
+"Mandala Yoga Hostel — Mandala AI (Proyecto)", sección 11.
+
+Principios que NO se negocian:
+- Nada específico de un cliente en el código. Todo vive en Supabase (tabla
+  `clientes` y tablas de datos) filtrado por `cliente_id`.
+- Toda decisión de negocio va en código (router, formularios), nunca en el prompt.
+- El LLM solo entiende y redacta. No inventa datos: los saca de herramientas
+  (Supabase) o el bot escala a humano.
+- Un solo mensaje de salida por turno del bot (cada saliente cuesta en Meta).
+- n8n no vive aquí. Solo se versionan sus exportaciones JSON en `n8n/flujos/`.
+
+## Estructura (dónde está cada cosa — no explores para descubrirlo)
+```
+src/index.ts                 arranque HTTP (Fastify), registra rutas
+src/config/env.ts            variables de entorno validadas con zod
+src/config/cliente.ts        carga configuración por cliente desde Supabase (cache)
+src/ingesta/webhook.ts       POST /webhook/chatwoot: 200 OK inmediato, valida, encola
+src/ingesta/dedup.ts         dedup por message_id (Redis)
+src/ingesta/buffer.ts        buffer ~8 s por conversación (agrupa fragmentos)
+src/ingesta/lock.ts          candado por conversación (Redis)
+src/router/index.ts          pipeline de reglas SIN LLM, en orden
+src/router/reglas/*.ts       una regla por archivo: pausado, pidioHumano,
+                             fueraDeAlcance, media, formularioActivo
+src/formularios/motor.ts     máquina de estados de captura de leads (por config)
+src/llm/llamarLLM.ts         única función que llama a OpenRouter (modelo por
+                             cliente + respaldo)
+src/llm/prompt.ts            ensambla el system prompt desde la config del cliente
+src/llm/herramientas/*.ts    tools: consultarFaq, consultarClases, consultarEventos,
+                             consultarHabitaciones, generarLinkReserva
+src/salida/chatwoot.ts       API de Chatwoot: enviar, marcar pendiente, resolver
+src/escalamiento/index.ts    pausar bot, avisar al equipo (webhook n8n), reactivar
+src/db/supabase.ts           cliente Supabase (service role)
+src/db/redis.ts              cliente Redis
+src/metricas/index.ts        escribe métricas en conversaciones/mensajes
+src/types/index.ts           CONTRATOS. Los define Claude. No cambiar sin avisar.
+tests/regresion/             ~50 casos del documento de Diego (JSON)
+tests/prueba-llm/            40 preguntas para elegir modelo
+infra/                       Docker Compose, Caddyfile, scripts de backup
+supabase/migrations/         esquema SQL (todo con cliente_id)
+supabase/seed/               datos iniciales (tenant pruebas + Mandala)
+```
+
+## Protocolo de ruteo de modelos JUTILABS
+Este archivo no cambia el modelo por sí solo: el humano lo selecciona en iCline.
+Tu obligación como agente: si la tarea que te piden NO corresponde al modelo con
+el que estás corriendo, dilo en tu primera respuesta y recomienda el cambio antes
+de tocar código. No "hagas lo que puedas" con el modelo equivocado.
+
+| Tarea | Con qué |
+|---|---|
+| Arquitectura, contratos (`src/types/`), prompts del LLM, revisión de seguridad, decisiones | Claude directo (chat de claude.ai). No iCline. |
+| Config (`.env`, Compose, Caddy), SQL simple, cambio mecánico en 1 archivo | Qwen3-coder-flash |
+| TypeScript cross-file, lógica nueva, más de un módulo | Qwen3-coder-plus |
+| JSON de flujos n8n | DeepSeek V3.2 |
+| 2 vueltas sin resolver, debugging iterativo, entregable de cliente en producción | Claude Code |
+
+Gatillo de escalado (obligatorio): si en 2 intentos la tarea no queda resuelta,
+o pierdes el hilo, PARA y escribe exactamente:
+`ESCALAR → qué intentaste / qué falló / archivo:línea / siguiente modelo sugerido`
+No insistas una tercera vez quemando tokens.
+
+## Regla: pregunta antes de lecturas amplias
+- Nunca leas el repo completo ni `src/` entero sin autorización explícita.
+- Antes de leer más de 3 archivos, o cualquier archivo de más de 300 líneas,
+  pregunta: "¿Leo X, Y, Z? Motivo: ...". Espera la respuesta.
+- Si el pedido es ambiguo, pide el archivo y la función exacta. No adivines
+  explorando.
+- No ejecutes `find`, `grep -r`, `cat` o `ls -R` sobre directorios completos sin
+  preguntar. La sección "Estructura" de arriba ya te dice dónde está cada cosa.
+- Scope quirúrgico: toca solo el archivo/función pedido. Si crees que hay que
+  tocar otro, dilo antes de hacerlo.
+
+## Reglas de código
+- Node 22, TypeScript estricto, ESM (`"type": "module"`). Prohibido `any`.
+- Toda consulta a Supabase filtra por `cliente_id`. Sin excepción, sin "luego lo
+  agrego".
+- Secretos solo en variables de entorno (`src/config/env.ts`). Nunca en código,
+  fixtures ni commits. `.env` está en `.gitignore`.
+- No agregues dependencias sin decir cuál y por qué en tu respuesta.
+- Nombres de dominio en español (`cliente_id`, `conversacion`, `escalar`);
+  nombres técnicos estándar en inglés (`handler`, `retry`, `cache`).
+- Errores: nunca silenciar con `catch {}` vacío. Loguear con pino y re-lanzar o
+  escalar según corresponda.
+- Commits pequeños, un tema por commit: `feat(router): ...`, `fix(ingesta): ...`,
+  `chore(infra): ...`.
+- Antes de decir "listo": `npm run typecheck` y `npm test` en verde. Si no los
+  corriste, dilo.
+
+## Qué NO hacer
+- No integrar la API de FrontDesk Master: no existe documentación pública. Solo
+  se usa el link del motor de reservas con parámetros.
+- No crear ni editar flujos de n8n desde este repo (solo versionar exportaciones).
+- No tocar `infra/` ni `supabase/` para "arreglar" un problema de TypeScript.
+- No hardcodear textos del bot, precios, horarios ni nombres del cliente.
+- No cambiar el orden de las reglas del router sin autorización: el orden es
+  una decisión de negocio.
