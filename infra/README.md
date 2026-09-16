@@ -4,7 +4,7 @@ Orden. No saltar pasos.
 
 1. Servidor: Ubuntu 24.04, `ufw` (22, 80, 443 únicamente), usuario no-root, Docker + compose plugin.
 2. DNS (registrador de jutilabs.com): registros A `chat`, `n8n`, `api` → IP del servidor. Sin esto Caddy no emite certificados.
-3. Clonar el repo en `/opt/jutilabs-brain`. Copiar `infra/.env.example` → `infra/.env`, `infra/.env.chatwoot.example` → `infra/.env.chatwoot`, `.env.example` → `.env` (raíz). Llenar TODO.
+3. Clonar el repo en `~/jutilabs-brain` (home del usuario del servidor). Copiar `infra/.env.example` → `infra/.env`, `infra/.env.chatwoot.example` → `infra/.env.chatwoot`, `.env.example` → `.env` (raíz). Llenar TODO.
 4. `cd infra && docker compose up -d postgres redis` — esperar `healthy` (`docker compose ps`).
 5. Preparar Chatwoot (una sola vez): `docker compose run --rm chatwoot-rails bundle exec rails db:chatwoot_prepare`
 6. `docker compose up -d` — Caddy pide certificados solo.
