@@ -103,6 +103,7 @@ export async function llamarLLM(
   try {
     return await conversar(ctx.cfg.llmModelo, mensajes, herramientas, ctx);
   } catch (e) {
+    console.error(`Falló ${ctx.cfg.llmModelo}: status=${(e as { status?: number })?.status ?? "sin-status"} motivo=${e instanceof Error ? e.message : String(e)}`);
     if (!ctx.cfg.llmModeloRespaldo || !esErrorReintentable(e)) throw e;
     return await conversar(ctx.cfg.llmModeloRespaldo, mensajes, herramientas, ctx);
   }
