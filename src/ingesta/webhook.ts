@@ -1,19 +1,45 @@
 import type { FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
+import type { ClienteConfig } from '../types/index.js';
+import { enviarMensaje } from '../salida/chatwoot.js';
 
 /**
  * POST /webhook/chatwoot
  * Contrato: responde 200 en < 200 ms SIEMPRE (Chatwoot reintenta si no). El procesamiento es asíncrono.
  * Pasos (ver §11.4 en Notion): validar secreto → filtrar solo message_created de contacto (no de agente)
  * → mapear a MensajeEntrante → dedup → buffer → procesar bajo candado.
- * TODO(qwen3-coder-plus): implementar. No bloquear la respuesta con await de la cadena.
+ *
+ * VERSIÓN TEMPORAL (prueba de camino completo): responde una frase fija. Sin IA, sin base de datos.
  */
+
+// TEMPORAL: configuración mínima de Mandala escrita a mano. Se borra al conectar la base de datos.
+const CFG_PRUEBA_MANDALA = {
+  chatwootAccountId: 1,
+  chatwootTokenRef: 'CHATWOOT_TOKEN_MANDALA',
+} as unknown as ClienteConfig;
+
+type CuerpoChatwoot = {
+  event?: string;
+  message_type?: string;
+  conversation?: { id?: number };
+};
+
 export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<void> {
   app.post('/webhook/chatwoot', async (req, reply) => {
     if (req.headers['x-jutilabs-secret'] !== env.CHATWOOT_WEBHOOK_SECRET) {
       return reply.code(401).send({ ok: false });
     }
-    // TODO: encolar procesamiento sin await
+
+    const cuerpo = (req.body ?? {}) as CuerpoChatwoot;
+    const conversationId = cuerpo.conversation?.id;
+
+    // Solo mensajes que ENTRAN del cliente. Si no, el bot se respondería a sí mismo sin parar.
+    if (cuerpo.event === 'message_created' && cuerpo.message_type === 'incoming' && conversationId) {
+      void enviarMensaje(CFG_PRUEBA_MANDALA, conversationId, 'hola, recibido').catch((e) => {
+        console.error('Falló el envío de la respuesta fija:', e instanceof Error ? e.message : e);
+      });
+    }
+
     return reply.code(200).send({ ok: true });
   });
 }
