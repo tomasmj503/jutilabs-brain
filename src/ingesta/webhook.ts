@@ -81,7 +81,7 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
         console.log(`LLM ${resp.modelo} ${resp.latenciaMs}ms tokens ${resp.tokensEntrada}/${resp.tokensSalida} herramientas=[${resp.herramientasUsadas.join(',')}] noSe=${resp.noSeElDato}`);
         if (resp.texto) await enviarMensaje(cfg, conversationId, resp.texto);
       })().catch((e) => {
-        console.error('Falló el procesamiento del mensaje:', e instanceof Error ? e.message : e);
+        console.error('Falló el procesamiento del mensaje:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
       });
     }
 
