@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
-import type { ClienteConfig } from '../types/index.js';
+import { cargarClientePorChatwootAccount } from '../config/cliente.js';
 import { enviarMensaje } from '../salida/chatwoot.js';
 
 /**
@@ -10,21 +10,17 @@ import { enviarMensaje } from '../salida/chatwoot.js';
  * Pasos (ver §11.4 en Notion): validar secreto → filtrar solo message_created de contacto (no de agente)
  * → mapear a MensajeEntrante → dedup → buffer → procesar bajo candado.
  *
- * VERSIÓN TEMPORAL (prueba de camino completo): responde una frase fija. Sin IA, sin base de datos.
+ * VERSIÓN TEMPORAL: la configuración del cliente ya viene de Supabase, pero la respuesta sigue siendo
+ * una frase fija. Sin IA todavía.
  * TEMPORAL: el secreto llega en la URL (?secret=...) porque Chatwoot no permite encabezados propios.
  * Pendiente: cambiar a la firma oficial de Chatwoot (X-Chatwoot-Signature).
  */
-
-// TEMPORAL: configuración mínima de Mandala escrita a mano. Se borra al conectar la base de datos.
-const CFG_PRUEBA_MANDALA = {
-  chatwootAccountId: 1,
-  chatwootTokenRef: 'CHATWOOT_TOKEN_MANDALA',
-} as unknown as ClienteConfig;
 
 type CuerpoChatwoot = {
   event?: string;
   message_type?: string;
   conversation?: { id?: number };
+  account?: { id?: number };
 };
 
 /** Compara dos textos sin filtrar información por el tiempo que tarda la comparación. */
@@ -51,11 +47,22 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
 
     const cuerpo = (req.body ?? {}) as CuerpoChatwoot;
     const conversationId = cuerpo.conversation?.id;
+    const accountId = cuerpo.account?.id;
 
     // Solo mensajes que ENTRAN del cliente. Si no, el bot se respondería a sí mismo sin parar.
-    if (cuerpo.event === 'message_created' && cuerpo.message_type === 'incoming' && conversationId) {
-      void enviarMensaje(CFG_PRUEBA_MANDALA, conversationId, 'hola, recibido').catch((e) => {
-        console.error('Falló el envío de la respuesta fija:', e instanceof Error ? e.message : e);
+    if (
+      cuerpo.event === 'message_created' &&
+      cuerpo.message_type === 'incoming' &&
+      conversationId &&
+      accountId
+    ) {
+      void (async () => {
+        const cfg = await cargarClientePorChatwootAccount(accountId);
+        // Kill-switch: cliente desconocido, inactivo o con el bot apagado → se ignora.
+        if (!cfg || !cfg.activo || !cfg.botActivo) return;
+        await enviarMensaje(cfg, conversationId, 'hola, recibido');
+      })().catch((e) => {
+        console.error('Falló el procesamiento del mensaje:', e instanceof Error ? e.message : e);
       });
     }
 
