@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
 import type { ClienteConfig } from '../types/index.js';
@@ -10,6 +11,8 @@ import { enviarMensaje } from '../salida/chatwoot.js';
  * → mapear a MensajeEntrante → dedup → buffer → procesar bajo candado.
  *
  * VERSIÓN TEMPORAL (prueba de camino completo): responde una frase fija. Sin IA, sin base de datos.
+ * TEMPORAL: el secreto llega en la URL (?secret=...) porque Chatwoot no permite encabezados propios.
+ * Pendiente: cambiar a la firma oficial de Chatwoot (X-Chatwoot-Signature).
  */
 
 // TEMPORAL: configuración mínima de Mandala escrita a mano. Se borra al conectar la base de datos.
@@ -24,9 +27,25 @@ type CuerpoChatwoot = {
   conversation?: { id?: number };
 };
 
+/** Compara dos textos sin filtrar información por el tiempo que tarda la comparación. */
+function secretosIguales(recibido: string | undefined, esperado: string): boolean {
+  if (!recibido) return false;
+  const a = createHash('sha256').update(recibido).digest();
+  const b = createHash('sha256').update(esperado).digest();
+  return timingSafeEqual(a, b);
+}
+
+function leerSecreto(encabezado: string | string[] | undefined, query: unknown): string | undefined {
+  const deEncabezado = Array.isArray(encabezado) ? encabezado[0] : encabezado;
+  if (deEncabezado) return deEncabezado;
+  const deUrl = (query as { secret?: unknown } | null)?.secret;
+  return typeof deUrl === 'string' ? deUrl : undefined;
+}
+
 export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<void> {
   app.post('/webhook/chatwoot', async (req, reply) => {
-    if (req.headers['x-jutilabs-secret'] !== env.CHATWOOT_WEBHOOK_SECRET) {
+    const recibido = leerSecreto(req.headers['x-jutilabs-secret'], req.query);
+    if (!secretosIguales(recibido, env.CHATWOOT_WEBHOOK_SECRET)) {
       return reply.code(401).send({ ok: false });
     }
 
