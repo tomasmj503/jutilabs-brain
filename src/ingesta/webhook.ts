@@ -3,6 +3,10 @@ import type { FastifyInstance } from 'fastify';
 import { env } from '../config/env.js';
 import { cargarClientePorChatwootAccount } from '../config/cliente.js';
 import { enviarMensaje } from '../salida/chatwoot.js';
+import type { ContextoConversacion } from '../types/index.js';
+import { llamarLLM } from '../llm/llamarLLM.js';
+import { construirSystemPrompt } from '../llm/prompt.js';
+import { herramientas } from '../llm/herramientas/index.js';
 
 /**
  * POST /webhook/chatwoot
@@ -19,6 +23,7 @@ import { enviarMensaje } from '../salida/chatwoot.js';
 type CuerpoChatwoot = {
   event?: string;
   message_type?: string;
+  content?: string;
   conversation?: { id?: number };
   account?: { id?: number };
 };
@@ -60,7 +65,21 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
         const cfg = await cargarClientePorChatwootAccount(accountId);
         // Kill-switch: cliente desconocido, inactivo o con el bot apagado → se ignora.
         if (!cfg || !cfg.activo || !cfg.botActivo) return;
-        await enviarMensaje(cfg, conversationId, 'hola, recibido');
+        const texto = (cuerpo.content ?? '').trim();
+        if (!texto) return; // sin texto (foto, audio...): el router de media llegará después
+        // TEMPORAL: sin router/dedup/buffer/lock todavía; el contexto se arma mínimo.
+        const conv: ContextoConversacion = {
+          id: '', clienteId: cfg.id, chatwootConversationId: conversationId, canal: 'whatsapp',
+          idioma: cfg.idiomaDefault, pais: null, estadoBot: 'activo', formularioActivo: null,
+          mensajesSalientesHoy: 0, ultimosMensajes: [],
+        };
+        const resp = await llamarLLM(
+          [{ rol: 'system', contenido: construirSystemPrompt(cfg, conv) }, { rol: 'user', contenido: texto }],
+          herramientas,
+          { cfg, conv },
+        );
+        console.log(`LLM ${resp.modelo} ${resp.latenciaMs}ms tokens ${resp.tokensEntrada}/${resp.tokensSalida} herramientas=[${resp.herramientasUsadas.join(',')}] noSe=${resp.noSeElDato}`);
+        if (resp.texto) await enviarMensaje(cfg, conversationId, resp.texto);
       })().catch((e) => {
         console.error('Falló el procesamiento del mensaje:', e instanceof Error ? e.message : e);
       });
