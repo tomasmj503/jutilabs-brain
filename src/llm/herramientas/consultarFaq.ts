@@ -29,10 +29,14 @@ export const consultarFaq: HerramientaLLM<{ consulta?: string }> = {
     const faqs = mejores(faq.data ?? [], (f) => 2 * puntuar(tokens, norm((f.palabras_clave ?? []).join(' '))) + puntuar(tokens, norm(`${f.pregunta_es} ${f.categoria}`)))
       .map((f) => ({ pregunta: f.pregunta_es, respuesta: f.respuesta_es }));
     const politicas = mejores(pol.data ?? [], (p) => 2 * puntuar(tokens, norm(`${p.tipo} ${p.titulo}`)) + puntuar(tokens, norm(p.texto_es)))
-      .map((p) => ({ titulo: p.titulo, texto: p.texto_es, pasar_a_persona_si: p.escala_si }));
+      .map((p) => ({ titulo: p.titulo, texto: p.texto_es, ...(p.escala_si ? { pasar_a_persona_solo_si_el_huesped_pide: p.escala_si } : {}) }));
     if (faqs.length === 0 && politicas.length === 0) {
       return { faq: [], politicas: [], nota: 'No hay información sobre esto. No inventes: avisa que consultarás al equipo y escribe [[NO_SE]].' };
     }
-    return { faq: faqs, politicas };
+    return {
+      faq: faqs,
+      politicas,
+      instruccion: 'Si el texto responde la pregunta, respóndela con ese texto y NO escribas [[NO_SE]]. Pasa a una persona (escribe [[NO_SE]]) solo si el huésped pide expresamente algo de la lista pasar_a_persona_solo_si_el_huesped_pide, o si no hay texto que responda.',
+    };
   },
 };

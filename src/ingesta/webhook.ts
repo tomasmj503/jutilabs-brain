@@ -7,6 +7,7 @@ import type { ContextoConversacion } from '../types/index.js';
 import { llamarLLM } from '../llm/llamarLLM.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { herramientas } from '../llm/herramientas/index.js';
+import { responderYEscalar } from '../salida/escalamiento.js';
 
 /**
  * POST /webhook/chatwoot
@@ -43,6 +44,12 @@ function leerSecreto(encabezado: string | string[] | undefined, query: unknown):
   return typeof deUrl === 'string' ? deUrl : undefined;
 }
 
+/** Saludo simple sin pregunta. Ahí no se obliga a consultar herramientas. */
+function esSoloSaludo(texto: string): boolean {
+  const t = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^(hola|holi|holis|buenas|buenos dias|buen dia|buenas tardes|buenas noches|hello|hi|hey|good morning|good afternoon|good evening|saludos)$/.test(t);
+}
+
 export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<void> {
   app.post('/webhook/chatwoot', async (req, reply) => {
     const recibido = leerSecreto(req.headers['x-jutilabs-secret'], req.query);
@@ -77,8 +84,14 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
           [{ rol: 'system', contenido: construirSystemPrompt(cfg, conv) }, { rol: 'user', contenido: texto }],
           herramientas,
           { cfg, conv },
+          { forzarHerramienta: !esSoloSaludo(texto) },
         );
         console.log(`LLM ${resp.modelo} ${resp.latenciaMs}ms tokens ${resp.tokensEntrada}/${resp.tokensSalida} herramientas=[${resp.herramientasUsadas.join(',')}] noSe=${resp.noSeElDato}`);
+        if (resp.noSeElDato) {
+          // Nunca se envía el texto del modelo aquí: en la prueba marcó "no sé" e igual inventó.
+          await responderYEscalar(cfg, conversationId, conv.idioma, texto);
+          return;
+        }
         if (resp.texto) await enviarMensaje(cfg, conversationId, resp.texto);
       })().catch((e) => {
         console.error('Falló el procesamiento del mensaje:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
