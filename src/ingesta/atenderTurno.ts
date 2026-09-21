@@ -24,7 +24,7 @@ export function saludoFijo(cfg: ClienteConfig, idioma: string): string | null {
 }
 
 /** Memoria: huésped → user; bot y agente → assistant. Los del sistema no se muestran al modelo. */
-export function armarMensajes(cfg: ClienteConfig, conv: ContextoConversacion, texto: string): Mensajes {
+export function armarMensajes(cfg: ClienteConfig, conv: ContextoConversacion, texto: string, esSaludo = false): Mensajes {
   const historial: Mensajes = [];
   for (const m of conv.ultimosMensajes) {
     const esHuesped = m.rol === 'huesped';
@@ -32,7 +32,7 @@ export function armarMensajes(cfg: ClienteConfig, conv: ContextoConversacion, te
     if (esHuesped) historial.push({ rol: 'user', contenido: m.contenido });
     else if (esBotOAgente) historial.push({ rol: 'assistant', contenido: m.contenido });
   }
-  const sistema = { rol: 'system' as const, contenido: construirSystemPrompt(cfg, conv) };
+  const sistema = { rol: 'system' as const, contenido: construirSystemPrompt(cfg, conv, esSaludo) };
   return [sistema, ...historial, { rol: 'user', contenido: texto }];
 }
 
@@ -102,7 +102,7 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   if (!conv) return;
   const texto = turno.textoAgrupado;
   const saludo = esSoloSaludo(texto) ? saludoFijo(cfg, conv.idioma) : null;
-  const resp = saludo ? null : await responderConModelo(cfg, conv, texto);
+  const resp = saludo ? null : await responderConModelo(cfg, conv, texto, esSoloSaludo(texto));
   // Justo antes de enviar: si una persona tomó la conversación mientras tanto, no se le pisa.
   if (await estaPausado(conv.id)) {
     console.log(`NO SE ENVÍA conv=${conv.chatwootConversationId} motivo=una persona tomó la conversación`);
@@ -126,11 +126,11 @@ type Resp = Awaited<ReturnType<typeof llamarLLMConReintento>>;
 
 /** Pide la respuesta al modelo. Devuelve null si falló del todo (ya se reintentó). */
 async function responderConModelo(
-  cfg: ClienteConfig, conv: ContextoConversacion, texto: string,
+  cfg: ClienteConfig, conv: ContextoConversacion, texto: string, esSaludo: boolean,
 ): Promise<Resp | null> {
   try {
     const r = await llamarLLMConReintento(
-      armarMensajes(cfg, conv, texto), herramientas, { cfg, conv },
+      armarMensajes(cfg, conv, texto, esSaludo), herramientas, { cfg, conv },
       { forzarHerramienta: !esSoloSaludo(texto) },
     );
     const h = r.herramientasUsadas.join(',');
