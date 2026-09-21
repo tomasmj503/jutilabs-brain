@@ -21,6 +21,7 @@ async function conversar(
   mensajes: Mensaje[],
   herramientas: HerramientaLLM[],
   ctx: Ctx,
+  forzarHerramienta: boolean,
 ): Promise<RespuestaLLM> {
   const cliente = new OpenAI({
     apiKey: secretoPorRef(ctx.cfg.openrouterKeyRef),
@@ -47,7 +48,8 @@ async function conversar(
       messages: msgs,
       temperature: ctx.cfg.llmTemperatura,
       max_tokens: 500,
-      ...(puedeUsarHerramientas ? { tools } : {}),
+      // Primera ronda: el modelo DEBE consultar una herramienta (no puede responder de memoria).
+      ...(puedeUsarHerramientas ? { tools, tool_choice: forzarHerramienta && ronda === 0 ? ('required' as const) : ('auto' as const) } : {}),
     });
 
     tokensEntrada += r.usage?.prompt_tokens ?? 0;
@@ -84,8 +86,10 @@ async function conversar(
         if (!herramienta) throw new Error('Herramienta desconocida');
         const args = JSON.parse(llamada.function.arguments || '{}') as Record<string, unknown>;
         resultado = await herramienta.ejecutar(args, ctx);
+        console.log(`HERRAMIENTA ${nombre} args=${JSON.stringify(args)} resultado=${JSON.stringify(resultado).slice(0, 400)}`);
         usadas.push(nombre);
-      } catch {
+      } catch (e) {
+        console.error(`HERRAMIENTA FALLÓ ${nombre}:`, e instanceof Error ? e.message : e);
         resultado = { error: 'No se pudo obtener ese dato' };
       }
       msgs.push({ role: 'tool', tool_call_id: llamada.id, content: JSON.stringify(resultado) });
@@ -99,11 +103,14 @@ export async function llamarLLM(
   mensajes: Mensaje[],
   herramientas: HerramientaLLM[],
   ctx: Ctx,
+  opciones: { forzarHerramienta?: boolean } = {},
 ): Promise<RespuestaLLM> {
+  const forzar = opciones.forzarHerramienta ?? true;
   try {
-    return await conversar(ctx.cfg.llmModelo, mensajes, herramientas, ctx);
+    return await conversar(ctx.cfg.llmModelo, mensajes, herramientas, ctx, forzar);
   } catch (e) {
+    console.error(`Falló ${ctx.cfg.llmModelo}: status=${(e as { status?: number })?.status ?? "sin-status"} motivo=${e instanceof Error ? e.message : String(e)}`);
     if (!ctx.cfg.llmModeloRespaldo || !esErrorReintentable(e)) throw e;
-    return await conversar(ctx.cfg.llmModeloRespaldo, mensajes, herramientas, ctx);
+    return await conversar(ctx.cfg.llmModeloRespaldo, mensajes, herramientas, ctx, forzar);
   }
 }

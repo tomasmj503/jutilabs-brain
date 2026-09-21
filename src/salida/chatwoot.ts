@@ -41,7 +41,19 @@ export async function enviarMensaje(cfg: ClienteConfig, conversationId: number, 
   return datos.id;
 }
 
-/** Deja la conversación en estado "pendiente" (esperando a una persona). */
-export async function marcarPendiente(cfg: ClienteConfig, conversationId: number): Promise<void> {
-  await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: 'pending' });
+/** Nota interna: solo la ve el equipo, nunca el huésped. */
+export async function enviarNotaPrivada(cfg: ClienteConfig, conversationId: number, texto: string): Promise<void> {
+  await llamarChatwoot(cfg, conversationId, 'messages', {
+    content: texto,
+    message_type: 'outgoing',
+    private: true,
+  });
+}
+
+/**
+ * Deja la conversación "abierta": en Chatwoot es el estado que el equipo ve en la lista por defecto.
+ * ("Pendiente" significa que un bot la está atendiendo.)
+ */
+export async function marcarAbierta(cfg: ClienteConfig, conversationId: number): Promise<void> {
+  await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: 'open' });
 }
