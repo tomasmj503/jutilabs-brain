@@ -8,6 +8,9 @@ import { herramientas } from '../llm/herramientas/index.js';
 import { rutear } from '../router/index.js';
 import { detectarIdioma, esSoloSaludo } from '../router/texto.js';
 import { aplicarReactivacion, estaPausado, guardarIdioma } from '../conversacion/estado.js';
+import { esRepeticion } from './repeticion.js';
+import { textoFijo } from './textosFijos.js';
+import { debeAcusar } from './acuse.js';
 
 type Mensajes = Parameters<typeof llamarLLMConReintento>[0];
 type Extra = Partial<Pick<MensajeAGuardar,
@@ -81,6 +84,7 @@ async function prepararTurno(
     // Hoy solo existe la regla "pausado". "escalar" y "formulario" llegarán con las reglas que faltan.
     const detalle = decision.tipo === 'ignorar' ? decision.motivo : decision.tipo;
     console.log(`SIN RESPUESTA conv=${conv.chatwootConversationId} motivo=${detalle}`);
+    if (decision.tipo === 'ignorar' && decision.motivo === 'bot_pausado') await acusarSiCorresponde(cfg, conv, turno);
     return null;
   }
   const idioma = detectarIdioma(turno.textoAgrupado, conv.idioma, cfg.idiomas);
@@ -108,6 +112,10 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   if (!resp) return escalarYGuardar(cfg, conv, texto, 'error_interno');
   if (resp.noSeElDato) return escalarYGuardar(cfg, conv, texto, 'no_se_el_dato');
   if (!resp.texto) return;
+  if (esRepeticion(conv, resp.texto, texto)) {
+    console.log(`REPETICIÓN EVITADA conv=${conv.chatwootConversationId}`);
+    return enviarYGuardar(cfg, conv, textoFijo(cfg, 'mensajeNoEntendi', conv.idioma), { origen: 'no_entendi' });
+  }
   await enviarYGuardar(cfg, conv, resp.texto, {
     origen: 'llm', modelo: resp.modelo, tokensEntrada: resp.tokensEntrada,
     tokensSalida: resp.tokensSalida, latenciaMs: resp.latenciaMs, herramientas: resp.herramientasUsadas,
@@ -131,5 +139,16 @@ async function responderConModelo(
   } catch (e) {
     console.error('LLM FALLÓ DEL TODO:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
     return null;
+  }
+}
+
+/** Bot pausado: avisa al huésped UNA vez por pausa. Si falla, solo se registra (nunca dispara otro escalamiento). */
+async function acusarSiCorresponde(cfg: ClienteConfig, conv: ContextoConversacion, turno: TurnoEntrante): Promise<void> {
+  try {
+    if (!(await debeAcusar(conv.id))) return;
+    const idioma = detectarIdioma(turno.textoAgrupado, conv.idioma, cfg.idiomas);
+    await enviarYGuardar(cfg, { ...conv, idioma }, textoFijo(cfg, 'mensajeAcuse', idioma), { origen: 'acuse' });
+  } catch (e) {
+    avisarFallo('NO SE PUDO AVISAR AL HUÉSPED (pausa)')(e);
   }
 }

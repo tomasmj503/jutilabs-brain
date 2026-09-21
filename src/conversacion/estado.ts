@@ -38,3 +38,12 @@ export async function estaPausado(conversacionId: string): Promise<boolean> {
   if (error) throw new Error(`Error leyendo el estado del bot: ${error.message}`);
   return (data as { estado_bot?: string } | null)?.estado_bot === 'pausado';
 }
+
+/** Cuándo y por qué quedó pausado el bot (sirve para distinguir su propia pausa de la de una persona). */
+export async function leerPausa(conversacionId: string): Promise<{ escaladoAt: string | null; motivo: string | null }> {
+  const { data, error } = await supabase.from('conversaciones')
+    .select('escalado_at, motivo_escalamiento').eq('id', conversacionId).maybeSingle();
+  if (error) throw new Error(`Error leyendo la pausa: ${error.message}`);
+  const f = data as { escalado_at: string | null; motivo_escalamiento: string | null } | null;
+  return { escaladoAt: f?.escalado_at ?? null, motivo: f?.motivo_escalamiento ?? null };
+}
