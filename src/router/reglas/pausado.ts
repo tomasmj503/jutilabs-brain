@@ -1,9 +1,9 @@
 import type { ReglaRouter } from '../../types/index.js';
 
-/** TODO(qwen3-coder-plus): ver descripción de la regla en .clinerules y §11.4 de Notion. */
+/** Bot pausado (escaló a una persona o una persona respondió): no contesta hasta que se reactive. */
 export const reglaPausado: ReglaRouter = {
   nombre: 'pausado',
-  async evaluar() {
-    throw new Error('No implementado: pausado');
+  async evaluar(_turno, ctx) {
+    return ctx.estadoBot === 'pausado' ? { tipo: 'ignorar', motivo: 'bot_pausado' } : null;
   },
 };
