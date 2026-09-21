@@ -18,4 +18,8 @@ describe('textoFijo', () => {
   it('ignora textos vacíos', () => {
     expect(textoFijo(cfg({ mensajeAcuse: { es: '  ' } }), 'mensajeAcuse', 'es')).toContain('Aquí sigo');
   });
+  it('el mensaje de "lo paso al equipo" existe en español e inglés', () => {
+    expect(textoFijo(cfg({}), 'mensajeNoSeElDato', 'es')).toContain('información correcta');
+    expect(textoFijo(cfg({}), 'mensajeNoSeElDato', 'en')).toContain('right information');
+  });
 });

@@ -9,6 +9,10 @@ const DEFECTO = {
     es: 'No te entendí bien 🙏 ¿Me lo cuentas de otra forma? Puedo ayudarte con habitaciones, clases de yoga, café y eventos.',
     en: "I didn't quite get that 🙏 Could you say it another way? I can help with rooms, yoga classes, the café and events.",
   },
+  mensajeNoSeElDato: {
+    es: 'Quiero darte la información correcta 🙏 Déjame pasar esta consulta a nuestro equipo para confirmarla.',
+    en: 'I want to give you the right information 🙏 Let me pass this to our team to confirm it.',
+  },
 } as const;
 
 /** Texto fijo por idioma: primero el de Supabase (configExtra.<clave>); si no existe, el de aquí. */
