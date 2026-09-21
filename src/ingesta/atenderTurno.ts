@@ -152,3 +152,31 @@ async function acusarSiCorresponde(cfg: ClienteConfig, conv: ContextoConversacio
     avisarFallo('NO SE PUDO AVISAR AL HUÉSPED (pausa)')(e);
   }
 }
+
+/**
+ * Si atenderTurno falla del todo (ej. Supabase caído a mitad de turno), intenta igual guardar
+ * los mensajes del huésped y la respuesta antes de escalar. Si ni eso se puede, el huésped
+ * igual recibe el aviso de "lo paso al equipo" (esa vez sin quedar en el historial).
+ */
+export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<void> {
+  const primero = turno.mensajes[0];
+  const conversationId = turno.chatwootConversationId;
+  try {
+    if (!primero) throw new Error('turno sin mensajes');
+    const conv = await obtenerContexto(cfg, {
+      conversationId, contactId: primero.chatwootContactId || null,
+      telefono: primero.telefono, canal: primero.canal,
+    });
+    for (const m of turno.mensajes) {
+      await guardarMensaje(cfg, {
+        conversacionId: conv.id, chatwootMessageId: m.chatwootMessageId || null, rol: 'huesped',
+        contenido: m.contenido, tipo: m.tipo,
+      }).catch(avisarFallo('NO SE GUARDÓ el mensaje del huésped (recuperando turno fallido)'));
+    }
+    await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'error_interno');
+  } catch (e) {
+    avisarFallo('NO SE PUDO RECUPERAR EL TURNO, se escala sin guardar historial')(e);
+    await responderYEscalar(cfg, conversationId, cfg.idiomaDefault, turno.textoAgrupado, 'error_interno')
+      .catch(avisarFallo('ESCALAMIENTO POR ERROR FALLÓ'));
+  }
+}

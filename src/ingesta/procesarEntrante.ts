@@ -3,8 +3,7 @@ import type { Aviso } from './aviso.js';
 import { yaProcesado } from './dedup.js';
 import { agregarAlBuffer } from './buffer.js';
 import { conCandadoEsperando } from './esperaCandado.js';
-import { atenderTurno, avisarFallo } from './atenderTurno.js';
-import { responderYEscalar } from '../salida/escalamiento.js';
+import { atenderTurno, manejarFalloDeTurno } from './atenderTurno.js';
 
 /** Mensaje que ENTRA del huésped: duplicados → buffer → candado (con espera) → turno. */
 export async function procesarEntrante(cfg: ClienteConfig, a: Aviso): Promise<void> {
@@ -32,8 +31,7 @@ export async function procesarEntrante(cfg: ClienteConfig, a: Aviso): Promise<vo
       await atenderTurno(cfg, turno);
     } catch (e) {
       console.error('FALLÓ EL TURNO:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
-      await responderYEscalar(cfg, conversationId, cfg.idiomaDefault, turno.textoAgrupado, 'error_interno')
-        .catch(avisarFallo('ESCALAMIENTO POR ERROR FALLÓ'));
+      await manejarFalloDeTurno(cfg, turno);
     }
   });
   if (!r.ok) console.error(`TURNO PERDIDO conv=${conversationId}: siguió ocupada 90 s`);
