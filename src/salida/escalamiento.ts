@@ -1,15 +1,8 @@
-import type { ClienteConfig } from '../types/index.js';
+import type { ClienteConfig, MotivoEscalamiento } from '../types/index.js';
 import { enviarMensaje, enviarNotaPrivada, marcarAbierta } from './chatwoot.js';
+import { pausarBot } from '../conversacion/estado.js';
+import { textoFijo } from '../ingesta/textosFijos.js';
 
-const MENSAJE_RESPALDO =
-  'Quiero darte la información correcta 🙏 Déjame pasar esta consulta a nuestro equipo para confirmarla.';
-
-/** Mensaje fijo de "lo paso al equipo", por idioma, desde Supabase. Nunca se usa el texto del modelo. */
-function mensajeNoSe(cfg: ClienteConfig, idioma: string): string {
-  const m = cfg.configExtra.mensajeNoSeElDato as Record<string, unknown> | null | undefined;
-  const texto = m?.[idioma] ?? m?.[cfg.idiomaDefault];
-  return typeof texto === 'string' && texto.trim() ? texto : MENSAJE_RESPALDO;
-}
 
 async function conUnReintento(paso: string, conversationId: number, f: () => Promise<void>): Promise<void> {
   for (let intento = 1; intento <= 2; intento++) {
@@ -22,15 +15,37 @@ async function conUnReintento(paso: string, conversationId: number, f: () => Pro
   }
 }
 
-/** El bot no tiene el dato: avisa al huésped, deja nota privada y deja la conversación abierta para el equipo. */
+/** Avisa al huésped, deja nota privada, abre la conversación para el equipo y pausa el bot. */
 export async function responderYEscalar(
   cfg: ClienteConfig,
   conversationId: number,
   idioma: string,
   pregunta: string,
-): Promise<void> {
-  await enviarMensaje(cfg, conversationId, mensajeNoSe(cfg, idioma));
-  const nota = `🤖 Escalado por el bot: no tenía el dato para responder.\nPregunta del huésped: "${pregunta.slice(0, 300)}"`;
+  motivo: MotivoEscalamiento = 'no_se_el_dato',
+): Promise<{ texto: string; mensajeId: number }> {
+  const texto = textoFijo(cfg, 'mensajeNoSeElDato', idioma);
+  const mensajeId = await enviarMensaje(cfg, conversationId, texto);
+  const causa = motivo === 'error_interno' ? 'falla técnica del bot (no fue falta de dato)' : 'no tenía el dato para responder';
+  const nota = `🤖 Escalado por el bot: ${causa}.\nPregunta del huésped: "${pregunta.slice(0, 300)}"`;
   await conUnReintento('nota', conversationId, () => enviarNotaPrivada(cfg, conversationId, nota));
   await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
+  await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
+  return { texto, mensajeId };
+}
+
+/**
+ * Tema de alto valor (India, voluntariado, etc.): el modelo YA respondió con la info real,
+ * así que aquí NO se manda un segundo mensaje al huésped (un solo mensaje de salida por turno).
+ * Solo se avisa al equipo y se pausa el bot.
+ */
+export async function avisarEquipoYPausar(
+  cfg: ClienteConfig,
+  conversationId: number,
+  motivo: MotivoEscalamiento,
+  pregunta: string,
+): Promise<void> {
+  const nota = `⭐ Tema de alto valor detectado (${motivo}): revisar y dar seguimiento.\nMensaje del huésped: "${pregunta.slice(0, 300)}"`;
+  await conUnReintento('nota', conversationId, () => enviarNotaPrivada(cfg, conversationId, nota));
+  await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
+  await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
 }

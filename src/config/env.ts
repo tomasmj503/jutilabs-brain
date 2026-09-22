@@ -12,7 +12,7 @@ const esquema = z.object({
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
   N8N_WEBHOOK_AVISOS: z.string().url(),
   N8N_WEBHOOK_SECRET: z.string().min(1),
-  BUFFER_MS: z.coerce.number().default(8000),
+  BUFFER_MS: z.coerce.number().default(4000),
   LOCK_TTL_MS: z.coerce.number().default(60000),
 });
 

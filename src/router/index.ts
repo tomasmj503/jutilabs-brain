@@ -1,12 +1,14 @@
 import type { ClienteConfig, ContextoConversacion, DecisionRouter, ReglaRouter, TurnoEntrante } from '../types/index.js';
 import { reglaPausado } from './reglas/pausado.js';
-import { reglaPidioHumano } from './reglas/pidioHumano.js';
 import { reglaFueraDeAlcance } from './reglas/fueraDeAlcance.js';
-import { reglaMedia } from './reglas/media.js';
-import { reglaFormularioActivo } from './reglas/formularioActivo.js';
 
-/** ORDEN = decisión de negocio. No reordenar sin autorización (ver .clinerules). */
-const reglas: ReglaRouter[] = [reglaPausado, reglaMedia, reglaFormularioActivo, reglaPidioHumano, reglaFueraDeAlcance];
+/**
+ * ORDEN = decisión de negocio. No reordenar sin autorización (ver .clinerules).
+ * FALTAN por construir (sus archivos existen en ./reglas pero lanzan error, por eso no están en la lista):
+ * media (fotos y audios) y formularioActivo.
+ * Orden previsto al construirlas: pausado → media → formularioActivo → fueraDeAlcance.
+ */
+const reglas: ReglaRouter[] = [reglaPausado, reglaFueraDeAlcance];
 
 export async function rutear(turno: TurnoEntrante, ctx: ContextoConversacion, cfg: ClienteConfig): Promise<DecisionRouter> {
   for (const regla of reglas) {
