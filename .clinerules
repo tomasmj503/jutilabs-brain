@@ -46,24 +46,9 @@ supabase/migrations/         esquema SQL (todo con cliente_id)
 supabase/seed/               datos iniciales (tenant pruebas + Mandala)
 ```
 
-## Protocolo de ruteo de modelos JUTILABS
-Este archivo no cambia el modelo por sí solo: el humano lo selecciona en iCline.
-Tu obligación como agente: si la tarea que te piden NO corresponde al modelo con
-el que estás corriendo, dilo en tu primera respuesta y recomienda el cambio antes
-de tocar código. No "hagas lo que puedas" con el modelo equivocado.
 
-| Tarea | Con qué |
-|---|---|
-| Arquitectura, contratos (`src/types/`), prompts del LLM, revisión de seguridad, decisiones | Claude directo (chat de claude.ai). No iCline. |
-| Config (`.env`, Compose, Caddy), SQL simple, cambio mecánico en 1 archivo | Qwen3-coder-flash |
-| TypeScript cross-file, lógica nueva, más de un módulo | Qwen3-coder-plus |
-| JSON de flujos n8n | DeepSeek V3.2 |
-| 2 vueltas sin resolver, debugging iterativo, entregable de cliente en producción | Claude Code |
-
-Gatillo de escalado (obligatorio): si en 2 intentos la tarea no queda resuelta,
-o pierdes el hilo, PARA y escribe exactamente:
-`ESCALAR → qué intentaste / qué falló / archivo:línea / siguiente modelo sugerido`
-No insistas una tercera vez quemando tokens.
+## Cómo se construye este repo
+Decisión de Millo (21-sep-2026): todo el desarrollo se hace directo aquí (chat de Claude o Claude Code), sin enrutar tareas a iCline ni a otros modelos. Se elimina el protocolo de ruteo anterior por fricción innecesaria.
 
 ## Regla: pregunta antes de lecturas amplias
 - Nunca leas el repo completo ni `src/` entero sin autorización explícita.

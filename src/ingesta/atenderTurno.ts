@@ -3,7 +3,7 @@ import { guardarMensaje, obtenerContexto, type MensajeAGuardar } from '../conver
 import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje } from '../salida/chatwoot.js';
-import { responderYEscalar } from '../salida/escalamiento.js';
+import { responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
 import { herramientas } from '../llm/herramientas/index.js';
 import { rutear } from '../router/index.js';
 import { detectarIdioma, esSoloSaludo } from '../router/texto.js';
@@ -16,14 +16,12 @@ type Mensajes = Parameters<typeof llamarLLMConReintento>[0];
 type Extra = Partial<Pick<MensajeAGuardar,
   'origen' | 'modelo' | 'tokensEntrada' | 'tokensSalida' | 'latenciaMs' | 'herramientas'>>;
 
-/** Texto fijo de saludo (configExtra.saludo, por idioma). Si no existe, responde el modelo. */
 export function saludoFijo(cfg: ClienteConfig, idioma: string): string | null {
   const s = cfg.configExtra.saludo as Record<string, unknown> | null | undefined;
   const texto = s?.[idioma] ?? s?.[cfg.idiomaDefault];
   return typeof texto === 'string' && texto.trim() ? texto : null;
 }
 
-/** Memoria: huésped → user; bot y agente → assistant. Los del sistema no se muestran al modelo. */
 export function armarMensajes(cfg: ClienteConfig, conv: ContextoConversacion, texto: string, esSaludo = false): Mensajes {
   const historial: Mensajes = [];
   for (const m of conv.ultimosMensajes) {
@@ -43,7 +41,6 @@ export async function enviarYGuardar(
   cfg: ClienteConfig, conv: ContextoConversacion, texto: string, extra: Extra = {},
 ): Promise<void> {
   const id = await enviarMensaje(cfg, conv.chatwootConversationId, texto);
-  // Si guardar falla, el huésped ya recibió su respuesta: solo se registra.
   await guardarMensaje(cfg, {
     conversacionId: conv.id, chatwootMessageId: id, rol: 'bot', contenido: texto, ...extra,
   }).catch(avisarFallo('NO SE GUARDÓ el mensaje del bot'));
@@ -59,13 +56,15 @@ export async function escalarYGuardar(
   }).catch(avisarFallo('NO SE GUARDÓ el mensaje de escalamiento'));
 }
 
+type Preparado = { conv: ContextoConversacion; temaAltoValor: MotivoEscalamiento | null };
+
 /**
  * Carga la conversación ANTES de guardar lo nuevo, aplica la reactivación, guarda lo que escribió
- * el huésped y consulta al router. Devuelve null si el bot no debe responder.
+ * el huésped y consulta al router. Devuelve null si el bot no debe responder nada.
+ * Si el router dice "escalar" (tema de alto valor), el turno SIGUE: el modelo responde con la
+ * info real y, después de enviarla, se avisa al equipo y se pausa (ver atenderTurno).
  */
-async function prepararTurno(
-  cfg: ClienteConfig, turno: TurnoEntrante,
-): Promise<ContextoConversacion | null> {
+async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<Preparado | null> {
   const primero = turno.mensajes[0];
   if (!primero) return null;
   const datos = {
@@ -80,8 +79,7 @@ async function prepararTurno(
     }).catch(avisarFallo('NO SE GUARDÓ el mensaje del huésped'));
   }
   const decision = await rutear(turno, conv, cfg);
-  if (decision.tipo !== 'llm') {
-    // Hoy solo existe la regla "pausado". "escalar" y "formulario" llegarán con las reglas que faltan.
+  if (decision.tipo === 'ignorar' || decision.tipo === 'formulario') {
     const detalle = decision.tipo === 'ignorar' ? decision.motivo : decision.tipo;
     console.log(`SIN RESPUESTA conv=${conv.chatwootConversationId} motivo=${detalle}`);
     if (decision.tipo === 'ignorar' && decision.motivo === 'bot_pausado') await acusarSiCorresponde(cfg, conv, turno);
@@ -93,13 +91,24 @@ async function prepararTurno(
     await guardarIdioma(cfg, conv.chatwootConversationId, idioma).catch(alerta);
     conv = { ...conv, idioma };
   }
-  return conv;
+  const temaAltoValor = decision.tipo === 'escalar' ? decision.motivo : null;
+  return { conv, temaAltoValor };
+}
+
+/** Avisa al equipo y pausa el bot DESPUÉS de que la respuesta ya salió (un solo mensaje al huésped). */
+async function avisarSiTemaAltoValor(
+  cfg: ClienteConfig, conv: ContextoConversacion, texto: string, temaAltoValor: MotivoEscalamiento | null,
+): Promise<void> {
+  if (!temaAltoValor) return;
+  await avisarEquipoYPausar(cfg, conv.chatwootConversationId, temaAltoValor, texto)
+    .catch(avisarFallo('NO SE PUDO AVISAR AL EQUIPO (tema de alto valor)'));
 }
 
 /** Atiende un turno completo: memoria, router, saludo, modelo y envío. Va dentro del candado. */
 export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<void> {
-  const conv = await prepararTurno(cfg, turno);
-  if (!conv) return;
+  const preparado = await prepararTurno(cfg, turno);
+  if (!preparado) return;
+  const { conv, temaAltoValor } = preparado;
   const texto = turno.textoAgrupado;
   const saludo = esSoloSaludo(texto) ? saludoFijo(cfg, conv.idioma) : null;
   const resp = saludo ? null : await responderConModelo(cfg, conv, texto, esSoloSaludo(texto));
@@ -108,18 +117,24 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
     console.log(`NO SE ENVÍA conv=${conv.chatwootConversationId} motivo=una persona tomó la conversación`);
     return;
   }
-  if (saludo) return enviarYGuardar(cfg, conv, saludo, { origen: 'saludo' });
+  if (saludo) {
+    await enviarYGuardar(cfg, conv, saludo, { origen: 'saludo' });
+    return avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
+  }
+  // Si falló del todo o el modelo no sabía el dato: ya escala con su propio motivo. No se duplica el aviso.
   if (!resp) return escalarYGuardar(cfg, conv, texto, 'error_interno');
   if (resp.noSeElDato) return escalarYGuardar(cfg, conv, texto, 'no_se_el_dato');
   if (!resp.texto) return;
   if (esRepeticion(conv, resp.texto, texto)) {
     console.log(`REPETICIÓN EVITADA conv=${conv.chatwootConversationId}`);
-    return enviarYGuardar(cfg, conv, textoFijo(cfg, 'mensajeNoEntendi', conv.idioma), { origen: 'no_entendi' });
+    await enviarYGuardar(cfg, conv, textoFijo(cfg, 'mensajeNoEntendi', conv.idioma), { origen: 'no_entendi' });
+    return avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
   }
   await enviarYGuardar(cfg, conv, resp.texto, {
     origen: 'llm', modelo: resp.modelo, tokensEntrada: resp.tokensEntrada,
     tokensSalida: resp.tokensSalida, latenciaMs: resp.latenciaMs, herramientas: resp.herramientasUsadas,
   });
+  await avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
 }
 
 type Resp = Awaited<ReturnType<typeof llamarLLMConReintento>>;

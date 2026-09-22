@@ -32,3 +32,20 @@ export async function responderYEscalar(
   await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
   return { texto, mensajeId };
 }
+
+/**
+ * Tema de alto valor (India, voluntariado, etc.): el modelo YA respondió con la info real,
+ * así que aquí NO se manda un segundo mensaje al huésped (un solo mensaje de salida por turno).
+ * Solo se avisa al equipo y se pausa el bot.
+ */
+export async function avisarEquipoYPausar(
+  cfg: ClienteConfig,
+  conversationId: number,
+  motivo: MotivoEscalamiento,
+  pregunta: string,
+): Promise<void> {
+  const nota = `⭐ Tema de alto valor detectado (${motivo}): revisar y dar seguimiento.\nMensaje del huésped: "${pregunta.slice(0, 300)}"`;
+  await conUnReintento('nota', conversationId, () => enviarNotaPrivada(cfg, conversationId, nota));
+  await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
+  await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
+}
