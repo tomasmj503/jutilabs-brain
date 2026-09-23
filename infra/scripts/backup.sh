@@ -18,8 +18,16 @@ for v in chatwoot_storage n8n_data caddy_data; do
   docker run --rm -v "jutilabs_${v}:/src:ro" -v "$TMP:/dest" alpine tar czf "/dest/${v}-$FECHA.tgz" -C /src .
 done
 tar czf "$TMP/secretos-$FECHA.tgz" -C "$REPO" .env infra/.env infra/.env.chatwoot
+# Supabase (plan gratuito, sin respaldos propios). Solo esquema public.
+SUPA_FALLO=0
+if ! ( source /etc/supabase-env && docker run --rm -e SUPABASE_DB_URL -e PGCONNECT_TIMEOUT=15 -v "$TMP:/dest" postgres:17 sh -c 'pg_dump "$SUPABASE_DB_URL" --schema=public --format=custom --no-owner --no-privileges --file="/dest/supabase-'"$FECHA"'.dump"' \
+  && [ "$(stat -c%s "$TMP/supabase-$FECHA.dump")" -gt 10000 ] \
+  && docker run --rm -v "$TMP:/dest:ro" postgres:17 pg_restore --list "/dest/supabase-$FECHA.dump" > /dev/null ); then
+  echo "SUPABASE FALLO $FECHA"; SUPA_FALLO=1; rm -f "$TMP"/supabase-*.dump
+fi
 chmod 600 "$TMP"/*
 mv "$TMP"/* "$DEST"/
 find "$DEST" -maxdepth 1 -type f -mtime +7 -delete
 "$REPO/infra/scripts/offsite.sh"
+[ "$SUPA_FALLO" = 0 ] || { echo "backup INCOMPLETO $FECHA (Supabase falló)"; exit 1; }
 echo "backup ok $FECHA"
