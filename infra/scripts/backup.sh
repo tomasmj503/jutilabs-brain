@@ -21,4 +21,5 @@ tar czf "$TMP/secretos-$FECHA.tgz" -C "$REPO" .env infra/.env infra/.env.chatwoo
 chmod 600 "$TMP"/*
 mv "$TMP"/* "$DEST"/
 find "$DEST" -maxdepth 1 -type f -mtime +7 -delete
+"$REPO/infra/scripts/offsite.sh"
 echo "backup ok $FECHA"
