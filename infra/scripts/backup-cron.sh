@@ -6,7 +6,7 @@ set -uo pipefail
 rc=$?
 if [ -r /etc/healthchecks-env ]; then
   source /etc/healthchecks-env
-  curl -fsS -m 10 --retry 5 -o /dev/null "$HC_PING_URL/$rc" || echo "AVISO: no se pudo avisar a Healthchecks (rc=$rc)"
+  curl -fsS -m 10 --retry 5 --retry-all-errors -o /dev/null "$HC_PING_URL/$rc" || echo "AVISO: no se pudo avisar a Healthchecks (rc=$rc)"
 else
   echo "AVISO: falta /etc/healthchecks-env, sin monitoreo"
 fi
