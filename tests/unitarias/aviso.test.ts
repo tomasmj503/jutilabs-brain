@@ -25,6 +25,13 @@ describe('leerAviso', () => {
     const conv = { id: 42, contact_inbox: { source_id: '573009998888' } };
     expect(leerAviso({ ...entrante, sender: { id: 7, type: 'contact' }, conversation: conv }).telefono).toBe('573009998888');
   });
+  it('lee el estado y el motivo del rechazo si el aviso los trae (message_updated)', () => {
+    const a = leerAviso({ ...entrante, event: 'message_updated', message_type: 1, status: 'failed', content_attributes: { external_error: ' 131047: Re-engagement message ' } });
+    expect(a).toMatchObject({ evento: 'message_updated', direccion: 'saliente', estado: 'failed', errorExterno: '131047: Re-engagement message' });
+  });
+  it('si el aviso no trae estado (Chatwoot 4.17.0), quedan en null', () => {
+    expect(leerAviso({ ...entrante, event: 'message_updated', message_type: 1 })).toMatchObject({ estado: null, errorExterno: null });
+  });
   it('no se rompe con campos faltantes', () => {
     expect(leerAviso({})).toMatchObject({
       evento: null, direccion: null, messageId: null, conversationId: null, telefono: null, contenido: '',

@@ -84,3 +84,18 @@ export async function avisarEquipoYPausar(
   await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
   await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
 }
+
+/**
+ * Meta rechazó DESPUÉS de aceptarlo un mensaje que salió por Chatwoot (Chatwoot lo marca "failed").
+ * Nota privada + conversación abierta para que el equipo se entere. NO reenvía nada al huésped
+ * (la mayoría de los motivos, como la ventana de 24 h o un número inválido, no se arreglan repitiendo).
+ * Si la nota no se puede dejar, LANZA el error: quien llama deshace la marca de "ya avisado" para reintentar luego.
+ */
+export async function avisarMensajeFallido(
+  cfg: ClienteConfig, conversationId: number, fallo: { error: string | null; contenido: string },
+): Promise<void> {
+  const motivo = fallo.error ?? 'Meta no informó el motivo';
+  const nota = `⚠️ Un mensaje NO llegó al huésped: WhatsApp (Meta) lo rechazó después de aceptarlo.\nMotivo que informa Meta: ${motivo}\nMensaje: "${fallo.contenido.slice(0, 300)}"\nQué hacer: revisa la conversación y, si hace falta, contacta al huésped por otro medio. Ojo: el botón "Reintentar" de Chatwoot puede marcarlo como enviado sin reenviarlo; si lo usas, confirma que sí llegó.`;
+  await enviarNotaPrivada(cfg, conversationId, nota);
+  await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
+}

@@ -6,11 +6,13 @@ import { leerAviso, type Aviso } from './aviso.js';
 import { procesarEntrante } from './procesarEntrante.js';
 import { procesarSaliente } from './procesarSaliente.js';
 import { registrarEnCurso } from './enCurso.js';
+import { procesarActualizacion } from './revisarFallo.js';
 
 /**
  * POST /webhook/chatwoot: responde 200 al instante SIEMPRE (si no, Chatwoot reintenta).
  * Mensaje del huésped: dedup → buffer → candado → router → modelo.
  * Mensaje de una persona del equipo: pausa el bot.
+ * message_updated: avisa al equipo si Meta rechazó un mensaje ya aceptado (ver revisarFallo.ts).
  * TEMPORAL: el secreto llega en la URL (?secret=...). Pendiente: firma oficial X-Chatwoot-Signature.
  */
 
@@ -33,6 +35,7 @@ async function despachar(a: Aviso & { accountId: number }): Promise<void> {
   const cfg = await cargarClientePorChatwootAccount(a.accountId);
   // Kill-switch: cliente desconocido, inactivo o con el bot apagado → se ignora.
   if (!cfg || !cfg.activo || !cfg.botActivo) return;
+  if (a.evento === 'message_updated') return procesarActualizacion(cfg, a); // ¿Meta rechazó un mensaje?
   if (a.direccion === 'entrante') await procesarEntrante(cfg, a);
   else if (a.direccion === 'saliente') await procesarSaliente(cfg, a);
 }
@@ -42,7 +45,7 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
     const recibido = leerSecreto(req.headers['x-jutilabs-secret'], req.query);
     if (!secretosIguales(recibido, env.CHATWOOT_WEBHOOK_SECRET)) return reply.code(401).send({ ok: false });
     const aviso = leerAviso(req.body);
-    if (aviso.evento === 'message_created' && aviso.accountId !== null && aviso.conversationId !== null) {
+    if ((aviso.evento === 'message_created' || aviso.evento === 'message_updated') && aviso.accountId !== null && aviso.conversationId !== null) {
       // Se anota como "en curso": si el cerebro se apaga, espera a que termine (ver src/apagado.ts).
       registrarEnCurso(despachar({ ...aviso, accountId: aviso.accountId }).catch((e) => {
         console.error('Falló el procesamiento del aviso:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);

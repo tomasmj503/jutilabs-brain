@@ -8,6 +8,10 @@ export interface Aviso {
   messageId: number | null; conversationId: number | null; accountId: number | null;
   contactId: number | null; telefono: string | null;
   remitenteTipo: string | null; remitenteId: number | null; contenido: string;
+  /** Estado del mensaje si el aviso lo trae (sent | delivered | read | failed). En Chatwoot 4.17.0 puede venir vacío. */
+  estado: string | null;
+  /** Motivo del rechazo que informa Meta (content_attributes.external_error), si viene. */
+  errorExterno: string | null;
 }
 
 /** Lee el aviso de Chatwoot sin suponer nada: cada campo puede venir vacío. Registra qué llegó. */
@@ -23,6 +27,7 @@ export function leerAviso(cuerpo: unknown): Aviso {
     contactId: n(meta.id) ?? (remitente.type === 'contact' ? n(remitente.id) : null),
     telefono: tel?.replace(/\D/g, '') || null,
     remitenteTipo: t(remitente.type), remitenteId: n(remitente.id), contenido: t(c.content) ?? '',
+    estado: t(c.status), errorExterno: t(o(c.content_attributes).external_error),
   };
   // TEMPORAL (prueba): qué campos llegan de verdad. El texto del huésped no se registra, solo su largo.
   console.log(`AVISO ${JSON.stringify({ ...aviso, contenido: aviso.contenido.length })} claves=${Object.keys(c).join(',')} remitente=${Object.keys(remitente).join(',')}`);
