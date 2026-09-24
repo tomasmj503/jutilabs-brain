@@ -106,6 +106,9 @@ services:
       dockerfile: Dockerfile
     image: jutilabs/brain:local
     restart: unless-stopped
+    # Cierre ordenado: al apagar, el cerebro espera hasta TOPE_APAGADO_MS (src/apagado.ts, 100 s) a que
+    # terminen los turnos en curso. Este tiempo debe ser MAYOR; si no, Docker lo corta antes (SIGKILL).
+    stop_grace_period: 110s
     env_file: ../.env
     environment:
       NODE_ENV: production

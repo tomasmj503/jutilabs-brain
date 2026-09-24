@@ -5,6 +5,7 @@ import { cargarClientePorChatwootAccount } from '../config/cliente.js';
 import { leerAviso, type Aviso } from './aviso.js';
 import { procesarEntrante } from './procesarEntrante.js';
 import { procesarSaliente } from './procesarSaliente.js';
+import { registrarEnCurso } from './enCurso.js';
 
 /**
  * POST /webhook/chatwoot: responde 200 al instante SIEMPRE (si no, Chatwoot reintenta).
@@ -42,9 +43,10 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
     if (!secretosIguales(recibido, env.CHATWOOT_WEBHOOK_SECRET)) return reply.code(401).send({ ok: false });
     const aviso = leerAviso(req.body);
     if (aviso.evento === 'message_created' && aviso.accountId !== null && aviso.conversationId !== null) {
-      void despachar({ ...aviso, accountId: aviso.accountId }).catch((e) => {
+      // Se anota como "en curso": si el cerebro se apaga, espera a que termine (ver src/apagado.ts).
+      registrarEnCurso(despachar({ ...aviso, accountId: aviso.accountId }).catch((e) => {
         console.error('Falló el procesamiento del aviso:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
-      });
+      }));
     }
     return reply.code(200).send({ ok: true });
   });

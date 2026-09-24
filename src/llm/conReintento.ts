@@ -4,7 +4,7 @@ type Args = Parameters<typeof llamarLLM>;
 
 /**
  * Reintenta una vez si el modelo falla RÁPIDO (red, DNS). Cada intento ya prueba el modelo de respaldo.
- * Si la falla fue lenta (tiempo agotado) no se repite: el candado de la conversación vence a los 60 s.
+ * Si la falla fue lenta (tiempo agotado) no se repite: el candado de la conversación (LOCK_TTL_MS, hoy 120 s) sigue corriendo.
  */
 export async function llamarLLMConReintento(...args: Args): Promise<Awaited<ReturnType<typeof llamarLLM>>> {
   const inicio = Date.now();
