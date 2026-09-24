@@ -13,7 +13,7 @@ const esquema = z.object({
   N8N_WEBHOOK_AVISOS: z.string().url(),
   N8N_WEBHOOK_SECRET: z.string().min(1),
   BUFFER_MS: z.coerce.number().default(4000),
-  LOCK_TTL_MS: z.coerce.number().default(60000),
+  LOCK_TTL_MS: z.coerce.number().default(120000),
 });
 
 export type Env = z.infer<typeof esquema>;

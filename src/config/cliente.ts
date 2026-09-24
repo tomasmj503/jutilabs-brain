@@ -2,6 +2,7 @@ import { supabase } from '../db/supabase.js';
 import type { ClienteConfig, Idioma } from '../types/index.js';
 
 const TTL_MS = 60_000;
+const REINTENTO_TRAS_FALLA_MS = 10_000;
 const cache = new Map<number, { cfg: ClienteConfig | null; expira: number }>();
 
 export async function cargarClientePorChatwootAccount(chatwootAccountId: number): Promise<ClienteConfig | null> {
@@ -14,7 +15,16 @@ export async function cargarClientePorChatwootAccount(chatwootAccountId: number)
     .eq('chatwoot_account_id', chatwootAccountId)
     .maybeSingle();
 
-  if (error) throw new Error(`Error leyendo cliente: ${error.message}`);
+  if (error) {
+    // Si Supabase falla pero ya conocíamos al cliente, se sigue con la última configuración conocida
+    // en vez de dejar al huésped sin respuesta. Se vuelve a intentar leerla en 10 s.
+    if (enCache?.cfg) {
+      console.warn(`CONFIG DEL CLIENTE: Supabase falló (${error.message}), se usa la última conocida`);
+      cache.set(chatwootAccountId, { cfg: enCache.cfg, expira: Date.now() + REINTENTO_TRAS_FALLA_MS });
+      return enCache.cfg;
+    }
+    throw new Error(`Error leyendo cliente: ${error.message}`);
+  }
 
   const cfg: ClienteConfig | null = data
     ? {

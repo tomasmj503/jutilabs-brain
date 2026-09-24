@@ -1,16 +1,22 @@
 import type { ClienteConfig } from '../types/index.js';
 import { env, secretoPorRef } from '../config/env.js';
+import { crearFetch } from '../red/reintento.js';
+
+// Llamadas que se pueden repetir sin daño (nota interna, estado, perfil): límite de 8 s y hasta 3 intentos.
+// OJO: enviar el mensaje al huésped NO usa esto (un reintento a ciegas puede duplicar el WhatsApp).
+const fetchSeguro = crearFetch({ nombre: 'chatwoot', politica: 'segura', timeoutMs: 8_000 });
 
 async function llamarChatwoot(
   cfg: ClienteConfig,
   conversationId: number,
   ruta: string,
   cuerpo: Record<string, unknown>,
+  hacerFetch: typeof fetch = fetch,
 ): Promise<Response> {
   const base = env.CHATWOOT_BASE_URL.replace(/\/+$/, '');
   const url = `${base}/api/v1/accounts/${cfg.chatwootAccountId}/conversations/${conversationId}/${ruta}`;
 
-  const respuesta = await fetch(url, {
+  const respuesta = await hacerFetch(url, {
     method: 'POST',
     headers: {
       // Con guion, no guion bajo: Caddy descarta los encabezados con guion bajo.
@@ -47,7 +53,7 @@ export async function enviarNotaPrivada(cfg: ClienteConfig, conversationId: numb
     content: texto,
     message_type: 'outgoing',
     private: true,
-  });
+  }, fetchSeguro);
 }
 
 /**
@@ -55,7 +61,7 @@ export async function enviarNotaPrivada(cfg: ClienteConfig, conversationId: numb
  * ("Pendiente" significa que un bot la está atendiendo.)
  */
 export async function marcarAbierta(cfg: ClienteConfig, conversationId: number): Promise<void> {
-  await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: 'open' });
+  await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: 'open' }, fetchSeguro);
 }
 
 const idsDelBot = new Map<string, number>();
@@ -65,7 +71,7 @@ export async function idUsuarioBot(cfg: ClienteConfig): Promise<number | null> {
   const guardado = idsDelBot.get(cfg.id);
   if (guardado !== undefined) return guardado;
   const base = env.CHATWOOT_BASE_URL.replace(/\/+$/, '');
-  const r = await fetch(`${base}/api/v1/profile`, {
+  const r = await fetchSeguro(`${base}/api/v1/profile`, {
     headers: { 'api-access-token': secretoPorRef(cfg.chatwootTokenRef) },
   });
   if (!r.ok) throw new Error(`Chatwoot respondió ${r.status} al pedir el perfil del bot`);
