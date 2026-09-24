@@ -19,12 +19,23 @@ for v in chatwoot_storage n8n_data caddy_data; do
 done
 tar czf "$TMP/secretos-$FECHA.tgz" -C "$REPO" .env infra/.env infra/.env.chatwoot
 # Supabase (plan gratuito, sin respaldos propios). Solo esquema public.
-SUPA_FALLO=0
-if ! ( source /etc/supabase-env && docker run --rm -e SUPABASE_DB_URL -e PGCONNECT_TIMEOUT=15 -v "$TMP:/dest" postgres:17 sh -c 'pg_dump "$SUPABASE_DB_URL" --schema=public --format=custom --no-owner --no-privileges --file="/dest/supabase-'"$FECHA"'.dump"' \
-  && [ "$(stat -c%s "$TMP/supabase-$FECHA.dump")" -gt 10000 ] \
-  && docker run --rm -v "$TMP:/dest:ro" postgres:17 pg_restore --list "/dest/supabase-$FECHA.dump" > /dev/null ); then
-  echo "SUPABASE FALLO $FECHA"; SUPA_FALLO=1; rm -f "$TMP"/supabase-*.dump
-fi
+# Viaja por una red con pérdida: hasta 3 intentos (20 s entre uno y otro). Cada intento tiene límite de 5 min
+# (timeout) y se valida completo (tamaño + pg_restore --list). Entre intentos se borra el archivo parcial.
+# Repetirlo es seguro: solo lee.
+supabase_dump() {
+  rm -f "$TMP"/supabase-*.dump
+  ( source /etc/supabase-env && docker run --rm -e SUPABASE_DB_URL -e PGCONNECT_TIMEOUT=15 -v "$TMP:/dest" postgres:17 sh -c 'timeout 300 pg_dump "$SUPABASE_DB_URL" --schema=public --format=custom --no-owner --no-privileges --file="/dest/supabase-'"$FECHA"'.dump"' \
+    && [ "$(stat -c%s "$TMP/supabase-$FECHA.dump")" -gt 10000 ] \
+    && docker run --rm -v "$TMP:/dest:ro" postgres:17 pg_restore --list "/dest/supabase-$FECHA.dump" > /dev/null )
+}
+SUPA_FALLO=1
+for i in 1 2 3; do
+  if supabase_dump; then SUPA_FALLO=0; break; fi
+  rm -f "$TMP"/supabase-*.dump
+  echo "SUPABASE intento $i/3 falló $FECHA"
+  [ "$i" = 3 ] || sleep 20
+done
+[ "$SUPA_FALLO" = 0 ] || echo "SUPABASE FALLO $FECHA"
 chmod 600 "$TMP"/*
 mv "$TMP"/* "$DEST"/
 find "$DEST" -maxdepth 1 -type f -mtime +7 -delete
