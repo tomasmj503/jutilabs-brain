@@ -9,6 +9,9 @@ export const redisFalso = {
     almacen.set(clave, valor);
     return 'OK';
   },
+  async del(clave: string) {
+    return almacen.delete(clave) ? 1 : 0;
+  },
   async eval(_script: string, _n: number, clave: string, dueno: string) {
     if (almacen.get(clave) !== dueno) return 0;
     almacen.delete(clave);

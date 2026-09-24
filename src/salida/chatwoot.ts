@@ -103,6 +103,40 @@ export async function verificarEnvio(
   }
 }
 
+export type EstadoMensaje =
+  | { estado: 'fallido'; error: string | null; contenido: string }
+  | { estado: 'ok' }
+  | { estado: 'no-encontrado' }
+  | { estado: 'no-se' };
+
+type MensajeConEstado = MensajeApi & { status?: unknown; content_attributes?: unknown };
+
+/**
+ * Pregunta a Chatwoot en qué estado quedó un mensaje (sent | delivered | read | failed). Es lectura pura: se puede
+ * repetir sin daño. No confía en el aviso (message_updated puede no traer el estado en 4.17.0): la verdad es la API.
+ * Solo mira los últimos mensajes de la conversación (la API los entrega en páginas de 20).
+ */
+export async function consultarEstadoMensaje(cfg: ClienteConfig, conversationId: number, messageId: number): Promise<EstadoMensaje> {
+  try {
+    const base = env.CHATWOOT_BASE_URL.replace(/\/+$/, '');
+    const url = `${base}/api/v1/accounts/${cfg.chatwootAccountId}/conversations/${conversationId}/messages`;
+    const r = await fetchSeguro(url, { headers: { 'api-access-token': secretoPorRef(cfg.chatwootTokenRef) } });
+    if (!r.ok) return { estado: 'no-se' };
+    const json = (await r.json()) as unknown;
+    const lista = Array.isArray(json) ? json : (json as { payload?: unknown } | null)?.payload;
+    if (!Array.isArray(lista)) return { estado: 'no-se' };
+    const m = (lista as MensajeConEstado[]).find((x) => x.id === messageId);
+    if (!m) return { estado: 'no-encontrado' };
+    if (typeof m.status !== 'string') return { estado: 'no-se' }; // sin estado no se afirma nada
+    if (m.status !== 'failed') return { estado: 'ok' };
+    const attrs = (m.content_attributes && typeof m.content_attributes === 'object' ? m.content_attributes : {}) as { external_error?: unknown };
+    const error = typeof attrs.external_error === 'string' && attrs.external_error.trim() ? attrs.external_error.trim().slice(0, 300) : null;
+    return { estado: 'fallido', error, contenido: typeof m.content === 'string' ? m.content : '' };
+  } catch {
+    return { estado: 'no-se' };
+  }
+}
+
 /**
  * Envía un mensaje al huésped SIN riesgo de duplicarlo. Devuelve el id del mensaje en Chatwoot.
  *  - Si el error prueba que nada salió (ej. EAI_AGAIN): reintenta solo (dentro de fetchEnvio).
