@@ -31,8 +31,8 @@ export async function procesarEntrante(cfg: ClienteConfig, a: Aviso): Promise<vo
       await atenderTurno(cfg, turno);
     } catch (e) {
       console.error('FALLÓ EL TURNO:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
-      await manejarFalloDeTurno(cfg, turno);
+      await manejarFalloDeTurno(cfg, turno, e);
     }
   });
-  if (!r.ok) console.error(`TURNO PERDIDO conv=${conversationId}: siguió ocupada 90 s`);
+  if (!r.ok) console.error(`TURNO PERDIDO conv=${conversationId}: siguió ocupada más allá del vencimiento del candado`);
 }
