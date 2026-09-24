@@ -1,10 +1,16 @@
 import type { ClienteConfig } from '../types/index.js';
 import { env, secretoPorRef } from '../config/env.js';
-import { crearFetch } from '../red/reintento.js';
+import { clasificarFalloDeRed, crearFetch, dormir, esFalloDeRed } from '../red/reintento.js';
+import { EnvioIncierto, ErrorChatwoot } from './errores.js';
 
 // Llamadas que se pueden repetir sin daño (nota interna, estado, perfil): límite de 8 s y hasta 3 intentos.
 // OJO: enviar el mensaje al huésped NO usa esto (un reintento a ciegas puede duplicar el WhatsApp).
 const fetchSeguro = crearFetch({ nombre: 'chatwoot', politica: 'segura', timeoutMs: 8_000 });
+// Envío al huésped: solo se repite si el error prueba que la petición nunca salió (ej. EAI_AGAIN).
+const fetchEnvio = crearFetch({ nombre: 'chatwoot-envio', politica: 'solo-si-no-salio', timeoutMs: 10_000 });
+
+const ESPERA_ANTES_DE_VERIFICAR_MS = 2_000; // deja terminar a Chatwoot si seguía procesando el envío
+const TOLERANCIA_RELOJ_MS = 1_500;
 
 async function llamarChatwoot(
   cfg: ClienteConfig,
@@ -28,23 +34,106 @@ async function llamarChatwoot(
 
   if (!respuesta.ok) {
     const detalle = await respuesta.text();
-    throw new Error(`Chatwoot respondió ${respuesta.status} en ${ruta}: ${detalle.slice(0, 200)}`);
+    throw new ErrorChatwoot(`Chatwoot respondió ${respuesta.status} en ${ruta}: ${detalle.slice(0, 200)}`, respuesta.status);
   }
   return respuesta;
 }
 
-/** Envía un mensaje al cliente. Devuelve el id del mensaje creado en Chatwoot. */
-export async function enviarMensaje(cfg: ClienteConfig, conversationId: number, texto: string): Promise<number> {
+class RespuestaSinId extends Error {}
+
+async function enviarUnaVez(cfg: ClienteConfig, conversationId: number, texto: string): Promise<number> {
   const respuesta = await llamarChatwoot(cfg, conversationId, 'messages', {
     content: texto,
     message_type: 'outgoing',
     private: false,
-  });
+  }, fetchEnvio);
   const datos = (await respuesta.json()) as { id?: number };
-  if (typeof datos.id !== 'number') {
-    throw new Error('Chatwoot no devolvió el id del mensaje');
-  }
+  if (typeof datos.id !== 'number') throw new RespuestaSinId('Chatwoot no devolvió el id del mensaje');
   return datos.id;
+}
+
+/** True si el error NO descarta que Chatwoot haya creado el mensaje (y por tanto salga al huésped). */
+function puedeHaberSalido(e: unknown): boolean {
+  if (e instanceof ErrorChatwoot) return e.estado >= 500; // un 4xx = Chatwoot lo rechazó, no se creó
+  if (e instanceof RespuestaSinId || e instanceof SyntaxError) return true; // respondió, pero sin poder leerse
+  return esFalloDeRed(e) && clasificarFalloDeRed(e) === 'quiza-salio';
+}
+
+export type ResultadoVerificacion =
+  | { estado: 'encontrado'; id: number }
+  | { estado: 'no-encontrado' }
+  | { estado: 'dudoso' }
+  | { estado: 'no-se' };
+
+type MensajeApi = { id?: unknown; content?: unknown; message_type?: unknown; private?: unknown; created_at?: unknown };
+
+const normalizar = (t: string) => t.replace(/\s+/g, ' ').trim();
+
+function esSalienteReciente(m: MensajeApi, desdeMs: number): boolean {
+  if (m.message_type !== 1 && m.message_type !== 'outgoing') return false;
+  if (m.private === true) return false;
+  if (typeof m.created_at !== 'number') return true; // sin fecha: por prudencia se cuenta
+  const ms = m.created_at < 1e12 ? m.created_at * 1000 : m.created_at;
+  return ms >= desdeMs - TOLERANCIA_RELOJ_MS;
+}
+
+/**
+ * Pregunta a Chatwoot si el mensaje ya quedó creado. Solo devuelve "no-encontrado" (que permite
+ * reenviar) si la respuesta llegó bien formada y no hay NINGÚN mensaje saliente nuevo.
+ * Cualquier duda ("dudoso", "no-se") significa: no reenviar.
+ */
+export async function verificarEnvio(
+  cfg: ClienteConfig, conversationId: number, texto: string, desdeMs: number,
+): Promise<ResultadoVerificacion> {
+  try {
+    const base = env.CHATWOOT_BASE_URL.replace(/\/+$/, '');
+    const url = `${base}/api/v1/accounts/${cfg.chatwootAccountId}/conversations/${conversationId}/messages`;
+    const r = await fetchSeguro(url, { headers: { 'api-access-token': secretoPorRef(cfg.chatwootTokenRef) } });
+    if (!r.ok) return { estado: 'no-se' };
+    const json = (await r.json()) as unknown;
+    const lista = Array.isArray(json) ? json : (json as { payload?: unknown } | null)?.payload;
+    if (!Array.isArray(lista)) return { estado: 'no-se' };
+    const nuevos = (lista as MensajeApi[]).filter((m) => esSalienteReciente(m, desdeMs));
+    const buscado = normalizar(texto);
+    const igual = nuevos.find((m) => typeof m.content === 'string' && typeof m.id === 'number' && normalizar(m.content) === buscado);
+    if (igual) return { estado: 'encontrado', id: igual.id as number };
+    return nuevos.length > 0 ? { estado: 'dudoso' } : { estado: 'no-encontrado' };
+  } catch {
+    return { estado: 'no-se' };
+  }
+}
+
+/**
+ * Envía un mensaje al huésped SIN riesgo de duplicarlo. Devuelve el id del mensaje en Chatwoot.
+ *  - Si el error prueba que nada salió (ej. EAI_AGAIN): reintenta solo (dentro de fetchEnvio).
+ *  - Si no se sabe si salió (corte, tiempo agotado, 5xx): primero mira en Chatwoot. Si ya está, no lo
+ *    reenvía; si de verdad no está, lo reenvía UNA vez; si no se puede saber, lanza EnvioIncierto.
+ *  - Si Chatwoot lo rechazó (4xx) o nunca se pudo conectar: lanza el error normal (no salió nada).
+ */
+export async function enviarMensaje(cfg: ClienteConfig, conversationId: number, texto: string): Promise<number> {
+  const desdeMs = Date.now();
+  for (let envio = 1; envio <= 2; envio++) {
+    try {
+      return await enviarUnaVez(cfg, conversationId, texto);
+    } catch (e) {
+      if (!puedeHaberSalido(e)) throw e;
+      console.warn(`ENVÍO AMBIGUO conv=${conversationId} envio=${envio}: ${e instanceof Error ? e.message : e} → se verifica en Chatwoot antes de reintentar`);
+      await dormir(ESPERA_ANTES_DE_VERIFICAR_MS);
+      const v = await verificarEnvio(cfg, conversationId, texto, desdeMs);
+      if (v.estado === 'encontrado') {
+        console.warn(`ENVÍO CONFIRMADO conv=${conversationId} mensaje=${v.id}: sí había salido, no se reenvía`);
+        return v.id;
+      }
+      if (v.estado === 'no-encontrado') {
+        if (envio === 2) throw e;
+        console.warn(`ENVÍO NO LLEGÓ conv=${conversationId}: se reenvía una vez`);
+        continue;
+      }
+      console.error(`ENVÍO INCIERTO conv=${conversationId} verificación=${v.estado}: NO se reenvía`);
+      throw new EnvioIncierto(v.estado, e);
+    }
+  }
+  throw new Error('enviarMensaje: flujo inalcanzable');
 }
 
 /** Nota interna: solo la ve el equipo, nunca el huésped. */
