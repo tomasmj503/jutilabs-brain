@@ -21,6 +21,7 @@ vi.mock('../../src/config/env.js', () => ({ env: {}, secretoPorRef: () => 'x' })
 vi.mock('../../src/db/supabase.js', () => ({ supabase: {} }));
 
 const { manejarFalloDeTurno } = await import('../../src/ingesta/atenderTurno.js');
+const { EnvioIncierto } = await import('../../src/salida/errores.js');
 
 const turno = {
   clienteId: 'c1', chatwootConversationId: 1,
@@ -45,5 +46,24 @@ describe('manejarFalloDeTurno', () => {
     await manejarFalloDeTurno(cfg, turno);
     expect(guardarMensajeMock).not.toHaveBeenCalled();
     expect(enviarMensajeMock).toHaveBeenCalled();
+  });
+
+  it('si la falla fue un envío que no se pudo confirmar: NO manda otro mensaje al huésped, solo alerta al equipo', async () => {
+    await manejarFalloDeTurno(cfg, turno, new EnvioIncierto('no-se', new Error('x')));
+    expect(enviarMensajeMock).not.toHaveBeenCalled();
+    expect(obtenerContextoMock).not.toHaveBeenCalled();
+    expect(enviarNotaPrivadaMock).toHaveBeenCalledWith(cfg, 1, expect.stringContaining('no pudo confirmar'));
+    expect(marcarAbiertaMock).toHaveBeenCalled();
+    expect(pausarBotMock).toHaveBeenCalledWith(cfg, 1, 'error_interno');
+  });
+
+  it('si el aviso al huésped no sale, igual deja nota y pausa, y no guarda un mensaje del bot que no existe', async () => {
+    obtenerContextoMock.mockResolvedValueOnce({ id: 'conv1', idioma: 'es', chatwootConversationId: 1 });
+    enviarMensajeMock.mockRejectedValueOnce(new Error('sin red'));
+    await manejarFalloDeTurno(cfg, turno);
+    expect(enviarNotaPrivadaMock).toHaveBeenCalledWith(cfg, 1, expect.stringContaining('NO salió'));
+    expect(pausarBotMock).toHaveBeenCalled();
+    const guardados = guardarMensajeMock.mock.calls.map((c) => (c[1] as { rol: string }).rol);
+    expect(guardados).toEqual(['huesped']);
   });
 });

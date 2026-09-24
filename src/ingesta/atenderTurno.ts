@@ -3,7 +3,8 @@ import { guardarMensaje, obtenerContexto, type MensajeAGuardar } from '../conver
 import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje } from '../salida/chatwoot.js';
-import { responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
+import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
+import { EnvioIncierto } from '../salida/errores.js';
 import { herramientas } from '../llm/herramientas/index.js';
 import { rutear } from '../router/index.js';
 import { detectarIdioma, esSoloSaludo } from '../router/texto.js';
@@ -50,6 +51,7 @@ export async function escalarYGuardar(
   cfg: ClienteConfig, conv: ContextoConversacion, pregunta: string, motivo: MotivoEscalamiento,
 ): Promise<void> {
   const r = await responderYEscalar(cfg, conv.chatwootConversationId, conv.idioma, pregunta, motivo);
+  if (r.mensajeId === null) return; // el aviso al huésped no salió: no hay mensaje que guardar
   await guardarMensaje(cfg, {
     conversacionId: conv.id, chatwootMessageId: r.mensajeId, rol: 'bot',
     contenido: r.texto, origen: 'escalamiento',
@@ -172,10 +174,17 @@ async function acusarSiCorresponde(cfg: ClienteConfig, conv: ContextoConversacio
  * Si atenderTurno falla del todo (ej. Supabase caído a mitad de turno), intenta igual guardar
  * los mensajes del huésped y la respuesta antes de escalar. Si ni eso se puede, el huésped
  * igual recibe el aviso de "lo paso al equipo" (esa vez sin quedar en el historial).
+ * Si la falla fue un envío que no se pudo confirmar (EnvioIncierto), no se manda nada más al huésped.
  */
-export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<void> {
+export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntrante, causa?: unknown): Promise<void> {
   const primero = turno.mensajes[0];
   const conversationId = turno.chatwootConversationId;
+  if (causa instanceof EnvioIncierto) {
+    // La respuesta pudo haber salido: mandar además "te paso con el equipo" duplicaría al huésped.
+    await alertarEnvioIncierto(cfg, conversationId, turno.textoAgrupado)
+      .catch(avisarFallo('ALERTA DE ENVÍO INCIERTO FALLÓ'));
+    return;
+  }
   try {
     if (!primero) throw new Error('turno sin mensajes');
     const conv = await obtenerContexto(cfg, {
