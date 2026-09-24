@@ -1,6 +1,9 @@
 # TLS automático (Let's Encrypt). Requiere DNS A de los 3 subdominios → IP del CX32 y dominio vigente.
 {
   email admin@jutilabs.com
+  servers {
+    protocols h1 h2
+  }
 }
 
 chat.jutilabs.com {

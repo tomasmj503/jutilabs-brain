@@ -87,6 +87,7 @@ services:
       N8N_HOST: n8n.jutilabs.com
       N8N_PROTOCOL: https
       N8N_PORT: 5678
+      N8N_PROXY_HOPS: 1
       WEBHOOK_URL: https://n8n.jutilabs.com/
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       GENERIC_TIMEZONE: America/Bogota
