@@ -98,6 +98,10 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     await guardarIdioma(cfg, conv.chatwootConversationId, idioma).catch(alerta);
     conv = { ...conv, idioma };
   }
+  if (decision.tipo === 'escalar' && decision.motivo === 'pidio_humano') {
+    await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'pidio_humano');
+    return null;
+  }
   const temaAltoValor = decision.tipo === 'escalar' ? decision.motivo : null;
   return { conv, temaAltoValor };
 }

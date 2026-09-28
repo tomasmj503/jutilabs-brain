@@ -22,7 +22,7 @@ const EN = new Set([
   'the', 'and', 'you', 'is', 'are', 'do', 'does', 'have', 'how', 'what', 'where', 'when', 'much', 'many',
   'room', 'rooms', 'book', 'booking', 'night', 'nights', 'please', 'thanks', 'thank', 'can', 'could',
   'would', 'want', 'need', 'there', 'with', 'for', 'from', 'class', 'classes', 'hello', 'hi', 'hey',
-  'your', 'price', 'prices', 'available', 'availability',
+  'your', 'price', 'prices', 'available', 'availability', 'human', 'person', 'someone', 'somebody', 'talk', 'speak', 'manager',
 ]);
 const ES = new Set([
   'el', 'la', 'los', 'las', 'de', 'que', 'y', 'es', 'en', 'un', 'una', 'por', 'para', 'con', 'hola',
