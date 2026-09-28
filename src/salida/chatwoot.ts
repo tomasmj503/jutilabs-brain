@@ -180,11 +180,17 @@ export async function enviarNotaPrivada(cfg: ClienteConfig, conversationId: numb
 }
 
 /**
- * Deja la conversación "abierta": en Chatwoot es el estado que el equipo ve en la lista por defecto.
- * ("Pendiente" significa que un bot la está atendiendo.)
+ * Deja la conversación "abierta" Y SIN ASIGNAR: así todo el equipo la ve en "Unassigned".
+ * ("Pendiente" significa que un bot la está atendiendo; "abierta" es la que el equipo ve por defecto.)
+ * Chatwoot asigna la conversación a quien la abre (aquí el propio bot: "self-assigned"), y así quedaba
+ * fuera de "Mine" y "Unassigned" de las personas del equipo. Por eso, después de abrirla se desasigna
+ * con `assignee_id: 0` (verificado en Chatwoot 4.17.0). Los dos pasos se pueden repetir sin daño; si
+ * el segundo falla se lanza el error para que quien llama reintente.
+ * Nota: si una persona ya la tenía asignada, también se le quita la asignación (sigue visible en "All").
  */
 export async function marcarAbierta(cfg: ClienteConfig, conversationId: number): Promise<void> {
   await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: 'open' }, fetchSeguro);
+  await llamarChatwoot(cfg, conversationId, 'assignments', { assignee_id: 0 }, fetchSeguro);
 }
 
 const idsDelBot = new Map<string, number>();
