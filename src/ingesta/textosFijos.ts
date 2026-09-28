@@ -13,6 +13,10 @@ const DEFECTO = {
     es: 'Quiero darte la información correcta 🙏 Déjame pasar esta consulta a nuestro equipo para confirmarla.',
     en: 'I want to give you the right information 🙏 Let me pass this to our team to confirm it.',
   },
+  mensajeMedia: {
+    es: 'Por ahora solo puedo leer mensajes de texto 🙏 ¿Me lo escribes? Si prefieres, te paso con el equipo.',
+    en: "For now I can only read text messages 🙏 Could you type it out? If you'd rather, I can pass you to our team.",
+  },
 } as const;
 
 /** Texto fijo por idioma: primero el de Supabase (configExtra.<clave>); si no existe, el de aquí. */

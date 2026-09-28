@@ -30,6 +30,6 @@ export async function agregarAlBuffer(msg: MensajeEntrante): Promise<TurnoEntran
     clienteId: msg.clienteId,
     chatwootConversationId: msg.chatwootConversationId,
     mensajes,
-    textoAgrupado: mensajes.map((m) => m.contenido).join('\n'),
+    textoAgrupado: mensajes.map((m) => m.contenido).filter(Boolean).join('\n'),
   };
 }
