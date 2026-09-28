@@ -1,7 +1,18 @@
+import type { TipoMensaje } from '../types/index.js';
+
 type Obj = Record<string, unknown>;
 const o = (x: unknown): Obj => (x && typeof x === 'object' ? (x as Obj) : {});
 const n = (x: unknown): number | null => (x === null || x === undefined || x === '' || !Number.isFinite(Number(x)) ? null : Number(x));
 const t = (x: unknown): string | null => (typeof x === 'string' && x.trim() ? x.trim() : null);
+
+/** Tipo (file_type de Chatwoot) de cada adjunto. Un adjunto sin tipo cuenta como 'otro' para no perderlo. */
+const leerAdjuntos = (x: unknown): string[] => (Array.isArray(x) ? x.map((a) => t(o(a).file_type) ?? 'otro') : []);
+
+const TIPOS_ADJUNTO = new Map<string, TipoMensaje>([
+  ['audio', 'audio'], ['image', 'imagen'], ['video', 'video'], ['file', 'documento'], ['location', 'ubicacion'],
+]);
+/** Tipo de mensaje del cerebro según el primer adjunto (lo desconocido es 'otro'). */
+export const tipoDeAdjuntos = (adjuntos: string[]): TipoMensaje => TIPOS_ADJUNTO.get(adjuntos[0] ?? '') ?? 'otro';
 
 export interface Aviso {
   evento: string | null; direccion: 'entrante' | 'saliente' | null; privado: boolean;
@@ -12,6 +23,8 @@ export interface Aviso {
   estado: string | null;
   /** Motivo del rechazo que informa Meta (content_attributes.external_error), si viene. */
   errorExterno: string | null;
+  /** file_type de cada adjunto (audio, image, video, file, location...). Vacío si es solo texto. */
+  adjuntos: string[];
 }
 
 /** Lee el aviso de Chatwoot sin suponer nada: cada campo puede venir vacío. Registra qué llegó. */
@@ -28,6 +41,7 @@ export function leerAviso(cuerpo: unknown): Aviso {
     telefono: tel?.replace(/\D/g, '') || null,
     remitenteTipo: t(remitente.type), remitenteId: n(remitente.id), contenido: t(c.content) ?? '',
     estado: t(c.status), errorExterno: t(o(c.content_attributes).external_error),
+    adjuntos: leerAdjuntos(c.attachments),
   };
   // TEMPORAL (prueba): qué campos llegan de verdad. El texto del huésped no se registra, solo su largo.
   console.log(`AVISO ${JSON.stringify({ ...aviso, contenido: aviso.contenido.length })} claves=${Object.keys(c).join(',')} remitente=${Object.keys(remitente).join(',')}`);

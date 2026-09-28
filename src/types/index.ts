@@ -104,6 +104,7 @@ export type DecisionRouter =
   | { tipo: 'ignorar'; motivo: string } // bot pausado, mensaje de agente, etc.
   | { tipo: 'escalar'; motivo: MotivoEscalamiento; mensajeAlHuesped: string | null }
   | { tipo: 'formulario'; estado: EstadoFormulario }
+  | { tipo: 'media'; tipos: TipoMensaje[] } // solo audio/imagen/ubicación, sin texto: pide que escriba y avisa al equipo
   | { tipo: 'llm' };
 
 export interface ReglaRouter {

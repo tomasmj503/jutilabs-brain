@@ -1,8 +1,8 @@
-import type { ClienteConfig, ContextoConversacion, MotivoEscalamiento, TurnoEntrante } from '../types/index.js';
+import type { ClienteConfig, ContextoConversacion, MotivoEscalamiento, TipoMensaje, TurnoEntrante } from '../types/index.js';
 import { guardarMensaje, obtenerContexto, type MensajeAGuardar } from '../conversacion/almacen.js';
 import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
-import { enviarMensaje } from '../salida/chatwoot.js';
+import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
 import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
 import { EnvioIncierto } from '../salida/errores.js';
 import { herramientas } from '../llm/herramientas/index.js';
@@ -12,6 +12,7 @@ import { aplicarReactivacion, estaPausado, guardarIdioma } from '../conversacion
 import { esRepeticion } from './repeticion.js';
 import { textoFijo } from './textosFijos.js';
 import { debeAcusar } from './acuse.js';
+import { debeAvisarMedia, descripcionMedia } from './avisoMedia.js';
 
 type Mensajes = Parameters<typeof llamarLLMConReintento>[0];
 type Extra = Partial<Pick<MensajeAGuardar,
@@ -77,7 +78,7 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
   for (const m of turno.mensajes) {
     await guardarMensaje(cfg, {
       conversacionId: conv.id, chatwootMessageId: m.chatwootMessageId || null, rol: 'huesped',
-      contenido: m.contenido, tipo: m.tipo,
+      contenido: m.contenido || `[${m.tipo}]`, tipo: m.tipo,
     }).catch(avisarFallo('NO SE GUARDÓ el mensaje del huésped'));
   }
   const decision = await rutear(turno, conv, cfg);
@@ -85,6 +86,10 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     const detalle = decision.tipo === 'ignorar' ? decision.motivo : decision.tipo;
     console.log(`SIN RESPUESTA conv=${conv.chatwootConversationId} motivo=${detalle}`);
     if (decision.tipo === 'ignorar' && decision.motivo === 'bot_pausado') await acusarSiCorresponde(cfg, conv, turno);
+    return null;
+  }
+  if (decision.tipo === 'media') {
+    await atenderMedia(cfg, conv, decision.tipos);
     return null;
   }
   const idioma = detectarIdioma(turno.textoAgrupado, conv.idioma, cfg.idiomas);
@@ -159,6 +164,30 @@ async function responderConModelo(
   }
 }
 
+/**
+ * El huésped mandó solo audio, imagen, ubicación u otro archivo (sin texto). El bot no los puede leer:
+ * pide que escriba (un aviso cada 10 min por conversación) y deja una nota privada al equipo (siempre).
+ * NO pausa el bot. Un fallo aquí se registra y nunca dispara otro escalamiento.
+ */
+async function atenderMedia(cfg: ClienteConfig, conv: ContextoConversacion, tipos: TipoMensaje[]): Promise<void> {
+  console.log(`MEDIA conv=${conv.chatwootConversationId} tipos=${tipos.join(',')}`);
+  let avisado = false;
+  try {
+    if (await debeAvisarMedia(conv.id)) {
+      await enviarYGuardar(cfg, conv, textoFijo(cfg, 'mensajeMedia', conv.idioma), { origen: 'media' });
+      avisado = true;
+    }
+  } catch (e) {
+    avisarFallo('NO SE PUDO PEDIRLE AL HUÉSPED QUE ESCRIBA (media)')(e);
+  }
+  const estado = avisado
+    ? 'El bot le pidió que lo escriba.'
+    : 'El bot no le pidió que lo escriba esta vez (ya lo había hecho hace poco o el aviso no salió).';
+  const nota = `📎 El huésped envió ${descripcionMedia(tipos)} (sin texto). ${estado} Revisa la conversación por si hace falta responderle.`;
+  await enviarNotaPrivada(cfg, conv.chatwootConversationId, nota)
+    .catch(avisarFallo('NO SE PUDO DEJAR LA NOTA AL EQUIPO (media)'));
+}
+
 /** Bot pausado: avisa al huésped UNA vez por pausa. Si falla, solo se registra (nunca dispara otro escalamiento). */
 async function acusarSiCorresponde(cfg: ClienteConfig, conv: ContextoConversacion, turno: TurnoEntrante): Promise<void> {
   try {
@@ -194,7 +223,7 @@ export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntran
     for (const m of turno.mensajes) {
       await guardarMensaje(cfg, {
         conversacionId: conv.id, chatwootMessageId: m.chatwootMessageId || null, rol: 'huesped',
-        contenido: m.contenido, tipo: m.tipo,
+        contenido: m.contenido || `[${m.tipo}]`, tipo: m.tipo,
       }).catch(avisarFallo('NO SE GUARDÓ el mensaje del huésped (recuperando turno fallido)'));
     }
     await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'error_interno');
