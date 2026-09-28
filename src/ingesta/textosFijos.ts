@@ -14,8 +14,10 @@ const DEFECTO = {
     en: 'I want to give you the right information 🙏 Let me pass this to our team to confirm it.',
   },
   mensajeMedia: {
-    es: 'Por ahora solo puedo leer mensajes de texto 🙏 ¿Me lo escribes? Si prefieres, te paso con el equipo.',
-    en: "For now I can only read text messages 🙏 Could you type it out? If you'd rather, I can pass you to our team.",
+    // Sin pregunta de sí/no ("¿me lo escribes?" haría que un "sí" fuera ambiguo) y con la frase EXACTA que activa
+    // la regla pidioHumano. Una prueba (avisoMediaTexto.test.ts) asegura que esa frase siga activándola.
+    es: 'Por ahora solo puedo leer mensajes de texto 🙏 Escríbeme lo que necesitas o, si prefieres hablar con una persona, escribe «quiero hablar con una persona» y te paso con el equipo.',
+    en: "For now I can only read text messages 🙏 Please type what you need or, if you'd rather talk to a person, write \"I want to talk to a person\" and I'll pass you to our team.",
   },
   mensajeHumano: {
     es: 'Claro, te paso con alguien del equipo 🙏 En cuanto puedan te escriben por aquí.',
