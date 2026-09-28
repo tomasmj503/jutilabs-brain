@@ -17,6 +17,10 @@ const DEFECTO = {
     es: 'Por ahora solo puedo leer mensajes de texto 🙏 ¿Me lo escribes? Si prefieres, te paso con el equipo.',
     en: "For now I can only read text messages 🙏 Could you type it out? If you'd rather, I can pass you to our team.",
   },
+  mensajeHumano: {
+    es: 'Claro, te paso con alguien del equipo 🙏 En cuanto puedan te escriben por aquí.',
+    en: "Of course, I'm passing you to someone on our team 🙏 They'll message you here as soon as they can.",
+  },
 } as const;
 
 /** Texto fijo por idioma: primero el de Supabase (configExtra.<clave>); si no existe, el de aquí. */
