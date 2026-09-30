@@ -146,6 +146,11 @@ export interface HerramientaLLM<TArgs = Record<string, unknown>, TResultado = un
   descripcion: string;
   parametros: Record<string, unknown>; // JSON Schema
   ejecutar(args: TArgs, ctx: { cfg: ClienteConfig; conv: ContextoConversacion }): Promise<TResultado>;
+  /**
+   * true = no se ofrece en la primera ronda obligatoria (tool_choice "required"). Sirve para herramientas de acción como
+   * pasar_a_persona: si estuvieran ahí, el modelo las usaría de atajo para no consultar la información.
+   */
+  soloTrasConsultar?: boolean;
 }
 
 export interface RespuestaLLM {

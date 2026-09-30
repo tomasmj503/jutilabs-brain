@@ -33,15 +33,20 @@ async function conversar(
 
   const inicio = Date.now();
   const msgs: MensajeAPI[] = mensajes.map((m) => ({ role: m.rol, content: m.contenido }));
-  const tools = herramientas.map((h) => ({
+  const aTools = (hs: HerramientaLLM[]) => hs.map((h) => ({
     type: 'function' as const,
     function: { name: h.nombre, description: h.descripcion, parameters: h.parametros },
   }));
+  const toolsTodas = aTools(herramientas);
+  // En la ronda obligatoria solo van las de consulta: las de acción (pasar_a_persona) se ofrecen después de consultar.
+  const toolsPrimeraRonda = aTools(herramientas.filter((h) => !h.soloTrasConsultar));
   const usadas: string[] = [];
   let tokensEntrada = 0;
   let tokensSalida = 0;
 
   for (let ronda = 0; ronda <= MAX_RONDAS_HERRAMIENTAS; ronda++) {
+    const rondaForzada = forzarHerramienta && ronda === 0;
+    const tools = rondaForzada && toolsPrimeraRonda.length > 0 ? toolsPrimeraRonda : toolsTodas;
     const puedeUsarHerramientas = tools.length > 0 && ronda < MAX_RONDAS_HERRAMIENTAS;
 
     const cuerpo = {
@@ -52,7 +57,7 @@ async function conversar(
       temperature: ctx.cfg.llmTemperatura,
       max_tokens: 500,
       // Primera ronda: el modelo DEBE consultar una herramienta (no puede responder de memoria).
-      ...(puedeUsarHerramientas ? { tools, tool_choice: forzarHerramienta && ronda === 0 ? ('required' as const) : ('auto' as const) } : {}),
+      ...(puedeUsarHerramientas ? { tools, tool_choice: rondaForzada ? ('required' as const) : ('auto' as const) } : {}),
     };
     const r = await cliente.chat.completions.create(cuerpo as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
 

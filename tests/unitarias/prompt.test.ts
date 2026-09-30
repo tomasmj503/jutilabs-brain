@@ -20,8 +20,8 @@ describe('construirSystemPrompt', () => {
   it('[[NO_SE]] es solo cuando no hay NINGÚN dato; para pedir a una persona se usa la herramienta', () => {
     const p = construirSystemPrompt({ ...cfg, temasQueEscalan: ['india', 'retiros'] } as ClienteConfig, conv);
     expect(p).toContain('Si no tienes NINGÚN dato para responder, escribe al final exactamente [[NO_SE]]');
-    expect(p).toContain('NO escribas [[NO_SE]]; lo que falte, dile que lo confirma el equipo');
-    expect(p).toContain('llama a la herramienta pasar_a_persona');
+    expect(p).toContain('primero consulta las herramientas de información y responde con TODO lo que sepas');
+    expect(p).toContain('pasar_a_persona NO reemplaza tu respuesta');
     expect(p).toContain('Nunca prometas "voy a pasar tu consulta al equipo" sin llamarla');
     expect(p).toContain('india, retiros');
     expect(p).toContain('NO escribas [[NO_SE]] solo por eso');

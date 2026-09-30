@@ -18,6 +18,7 @@ describe('herramienta pasar_a_persona', () => {
     const r = await pasarAPersona.ejecutar({}, { cfg: {} as ClienteConfig, conv: {} as ContextoConversacion });
     expect(r).toMatchObject({ ok: true });
     expect(pasarAPersona.parametros.required).toEqual([]);
+    expect(pasarAPersona.soloTrasConsultar).toBe(true);
   });
 });
 

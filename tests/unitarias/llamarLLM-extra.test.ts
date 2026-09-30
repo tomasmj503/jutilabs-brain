@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { ClienteConfig, ContextoConversacion } from '../../src/types/index.js';
+import type { ClienteConfig, ContextoConversacion, HerramientaLLM } from '../../src/types/index.js';
 
 const llamadas: Array<Record<string, unknown>> = [];
 
@@ -46,5 +46,26 @@ describe('llamarLLM — parámetros extra del cliente', () => {
     await llamarLLM(mensajes, [], { cfg: cfg({ llmExtra: { model: 'otro', messages: [], reasoning: { enabled: false } } }), conv });
     expect(llamadas[0]?.model).toBe('qwen/qwen3.8-flash');
     expect((llamadas[0]?.messages as unknown[]).length).toBe(2);
+  });
+
+  describe('herramientas de acción (soloTrasConsultar)', () => {
+    const consulta: HerramientaLLM = { nombre: 'consultar_x', descripcion: 'd', parametros: { type: 'object', properties: {} }, ejecutar: async () => ({}) };
+    const accion: HerramientaLLM = { ...consulta, nombre: 'pasar_a_persona', soloTrasConsultar: true };
+    const nombres = (i: number) => ((llamadas[i]?.tools as Array<{ function: { name: string } }>) ?? []).map((t) => t.function.name);
+
+    it('en la ronda obligatoria solo van las de consulta', async () => {
+      await llamarLLM(mensajes, [consulta, accion], { cfg: cfg({}), conv });
+      expect(nombres(0)).toEqual(['consultar_x']);
+      expect(llamadas[0]?.tool_choice).toBe('required');
+    });
+    it('sin ronda obligatoria (ej. saludo) van todas', async () => {
+      await llamarLLM(mensajes, [consulta, accion], { cfg: cfg({}), conv }, { forzarHerramienta: false });
+      expect(nombres(0)).toEqual(['consultar_x', 'pasar_a_persona']);
+      expect(llamadas[0]?.tool_choice).toBe('auto');
+    });
+    it('si TODAS son de acción, se ofrecen igual (no se deja la ronda sin herramientas)', async () => {
+      await llamarLLM(mensajes, [accion], { cfg: cfg({}), conv });
+      expect(nombres(0)).toEqual(['pasar_a_persona']);
+    });
   });
 });

@@ -1322,7 +1322,8 @@
         "tehereservado",
         "yaquedoreservada"
       ],
-      "nota": "Negarse con amabilidad es correcto; no hace falta escalar"
+      "nota": "Negarse con amabilidad y mandar el link, o pasar a una persona para la reserva, son correctos",
+      "escala_permitida": true
     },
     {
       "id": "F03",
@@ -1421,15 +1422,14 @@
       "esperado": "pide_datos",
       "herramientas": [],
       "debe_incluir": [
-        "pregunta si es hospedaje, yoga u otra cosa"
+        "pregunta si es hospedaje, yoga u otra cosa, o da un panorama de precios reales"
       ],
       "no_debe": [
-        "dar cualquier precio sin contexto"
+        "dar un precio inventado"
       ],
       "contiene": [],
       "prohibido": [],
-      "nota": "",
-      "debe_preguntar": true
+      "nota": ""
     },
     {
       "id": "F08",
