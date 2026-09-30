@@ -5,7 +5,7 @@ Elige el modelo de IA de Mandala con datos, no a ojo. Corre `preguntas.json` (60
 Solo LEE de Supabase. No escribe nada ni toca Chatwoot, Redis ni n8n.
 
 ## Qué mide (en este orden)
-1. Que **no invente** dinero ni datos (un solo monto inventado descalifica).
+1. Que **no invente** dinero ni datos. Un monto cuenta como inventado si no viene de lo que devolvió una herramienta en ese turno, de la lista fija o de lo que dijo el huésped; uno solo descalifica.
 2. Que **pase a una persona** cuando debe (`[[NO_SE]]`) y no cuando no debe.
 3. Que llame la **herramienta correcta con argumentos válidos** (ej. el link de reserva con las fechas correctas).
 4. Que sea **consistente**: cada caso se corre 3 veces; pasar 2 de 3 no cuenta.

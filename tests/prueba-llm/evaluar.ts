@@ -123,7 +123,7 @@ const busquedaVacia = (nombre: string, r: unknown): boolean =>
   && Array.isArray(r.politicas) && r.politicas.length === 0;
 
 export interface ContextoEvaluacion {
-  /** Montos que el modelo SÍ puede decir (precios activos en la base + los fijos del set). */
+  /** Montos que el modelo SÍ puede decir aunque ninguna herramienta los haya devuelto (precios activos + fijos del set + lo que dijo el huésped). */
   montosPermitidos: ReadonlySet<number>;
   /** Hoy en AAAA-MM-DD, zona horaria del cliente. */
   hoy: string;
@@ -165,7 +165,11 @@ export function evaluar(caso: Caso, ej: Ejecucion, ctx: ContextoEvaluacion): Eva
     }
   }
 
-  const fuera = extraerMontos(ej.texto).filter((m) => !ctx.montosPermitidos.has(m));
+  // Un monto es inventado solo si NO viene de lo que devolvió una herramienta en este turno (el bot solo puede repetir lo que la base le dio),
+  // ni de la lista fija, ni lo dijo el propio huésped.
+  const respaldados = new Set<number>(ctx.montosPermitidos);
+  for (const l of ej.llamadas) for (const m of extraerMontos(JSON.stringify(l.resultado ?? null))) respaldados.add(m);
+  const fuera = extraerMontos(ej.texto).filter((m) => !respaldados.has(m));
   if (fuera.length > 0) marcar('monto', `montos no permitidos: ${fuera.join(', ')}`);
 
   const p = plano(ej.texto);

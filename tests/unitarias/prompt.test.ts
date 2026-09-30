@@ -17,4 +17,15 @@ describe('construirSystemPrompt', () => {
     expect(p).toContain('El huésped solo saludó');
     expect(p).toContain('No des precios, horarios ni ningún otro dato');
   });
+  it('[[NO_SE]] es solo para cuando falta el dato: un tema de la lista no basta para escribirlo', () => {
+    const p = construirSystemPrompt({ ...cfg, temasQueEscalan: ['india', 'retiros'] } as ClienteConfig, conv);
+    expect(p).toContain('Si tienes el dato, respóndelo y NO escribas [[NO_SE]]');
+    expect(p).toContain('india, retiros');
+    expect(p).toContain('NO escribas [[NO_SE]] solo por eso');
+    // la regla vieja ("o el tema debe pasar a una persona, escribe [[NO_SE]]") contradecía a la lista de temas
+    expect(p).not.toContain('o el tema debe pasar a una persona, escribe');
+  });
+  it('sin temas que escalan, no agrega esa sección', () => {
+    expect(construirSystemPrompt(cfg, conv)).not.toContain('TEMAS QUE PASAN A UNA PERSONA');
+  });
 });

@@ -17,7 +17,7 @@ export function construirSystemPrompt(
     `IDENTIDAD\nTe llamas ${cfg.nombreBot}. Eres un asistente virtual, no una persona; si te preguntan, lo dices.`,
     `IDIOMA\nResponde en ${idioma}. Si el huésped escribe en otro de estos idiomas (${cfg.idiomas.join(', ')}), responde en ese.`,
     `FECHA Y HORA ACTUAL\n${ahora}`,
-    `REGLAS DURAS\n- Nunca inventes datos.\n- Responde con UN solo mensaje corto.\n- Si no tienes el dato, o el tema debe pasar a una persona, escribe al final exactamente ${MARCA_NO_SE} y avisa que pasarás la consulta al equipo.`,
+    `REGLAS DURAS\n- Nunca inventes datos.\n- Responde con UN solo mensaje corto.\n- Si no tienes el dato, escribe al final exactamente ${MARCA_NO_SE} y avisa que pasarás la consulta al equipo. Si tienes el dato, respóndelo y NO escribas ${MARCA_NO_SE}.`,
   ];
 
   if (esSaludo) {
@@ -25,7 +25,11 @@ export function construirSystemPrompt(
   }
 
   if (cfg.temasQueEscalan.length > 0) {
-    partes.push(`TEMAS QUE PASAN A UNA PERSONA\n${cfg.temasQueEscalan.join(', ')}`);
+    partes.push(
+      `TEMAS QUE PASAN A UNA PERSONA\n${cfg.temasQueEscalan.join(', ')}\n`
+      + `Si el huésped toca alguno de estos temas, responde con la información real que tengas (consulta las herramientas) y NO escribas ${MARCA_NO_SE} solo por eso: `
+      + `el sistema pasa la conversación a una persona automáticamente después de tu respuesta. Escribe ${MARCA_NO_SE} únicamente si además te falta el dato.`,
+    );
   }
 
   return partes.join('\n\n');

@@ -71,6 +71,11 @@ describe('evaluar — texto', () => {
     const r = evaluar(caso(), ej({ texto: 'El paquete de 12 clases vale $460.000 COP' }), ctx);
     expect(r.graves).toContain('monto');
   });
+  it('un monto que devolvió una herramienta NO es inventado (ej. los tres precios de India)', () => {
+    const llamadas = [{ nombre: 'consultar_faq', args: {}, resultado: { faq: [{ respuesta: 'Early Bird USD 2.790; precio regular USD 2.990' }] } }];
+    expect(evaluar(caso(), ej({ llamadas, texto: 'Early Bird USD 2.790 y regular USD 2.990' }), ctx).ok).toBe(true);
+    expect(evaluar(caso(), ej({ llamadas, texto: 'Cuesta USD 3.500' }), ctx).graves).toContain('monto');
+  });
   it('acepta los montos permitidos', () => {
     expect(evaluar(caso(), ej({ texto: 'La clase vale $66.000 y el paquete de 4, $160.000' }), ctx).ok).toBe(true);
   });

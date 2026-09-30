@@ -199,7 +199,10 @@ async function ejecutarCaso(caso: Caso, modelo: string): Promise<Ejecucion[]> {
       if (r.noSeElDato) break; // en producción el bot se pausa: no hay siguiente mensaje
       historial.push({ rol: 'huesped', contenido: texto }, { rol: 'bot', contenido: r.texto });
     } catch (e) {
-      salidas.push({ ...base, texto: '', noSeElDato: false, llamadas, sinModelo: false, error: e instanceof Error ? e.message : String(e) });
+      // El cuerpo del error (e.error) trae qué proveedor falló y por qué; el mensaje solo dice "Provider returned error".
+      const cuerpo = (e as { error?: unknown }).error;
+      const detalle = cuerpo === undefined ? '' : ` :: ${JSON.stringify(cuerpo).slice(0, 700)}`;
+      salidas.push({ ...base, texto: '', noSeElDato: false, llamadas, sinModelo: false, error: `${e instanceof Error ? e.message : String(e)}${detalle}` });
       break;
     }
   }
@@ -243,6 +246,7 @@ async function correrPrueba(): Promise<void> {
   console.log(`Modelos: ${modelos.join(', ')}${modelos.includes(cfg0.llmModelo) ? `  (referencia: ${cfg0.llmModelo} es el modelo actual del cliente)` : ''}\n`);
 
   const resumenes: Record<string, ReturnType<typeof resumir>> = {};
+  const errores: Record<string, Map<string, number>> = {};
   const hallazgosRouter = new Map<string, boolean>();
 
   for (const modelo of modelos) {
@@ -274,16 +278,20 @@ async function correrPrueba(): Promise<void> {
     const slug = modelo.replace(/[^a-z0-9.]+/gi, '_');
     await writeFile(`${dir}${slug}.jsonl`, `${lineas.join('\n')}\n`);
     resumenes[modelo] = resumir(corridas);
+    const distintos = new Map<string, number>();
+    for (const c of corridas) if (c.ej.error) distintos.set(c.ej.error, (distintos.get(c.ej.error) ?? 0) + 1);
+    errores[modelo] = distintos;
   }
 
   await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
-  await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter));
+  await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores));
   console.log(`\nListo. Resultados en ${dir}`);
   console.log(await readFile(`${dir}resumen.md`, 'utf8'));
 }
 
 function resumenEnMarkdown(
   marca: string, modelos: string[], r: Record<string, ReturnType<typeof resumir>>, casos: Caso[], router: Map<string, boolean>,
+  errores: Record<string, Map<string, number>>,
 ): string {
   const L: string[] = [`# Resumen prueba LLM ${marca}\n`];
   L.push('Criterios (fijados antes de correr): monto inventado 0 · dijo algo prohibido 0 · escalamiento correcto ≥95% · falsa escalación ≤5% · herramienta correcta ≥95% · consistencia ≥90% · errores API ≤2% · latencia p95 ≤12 s\n');
@@ -309,6 +317,14 @@ function resumenEnMarkdown(
   for (const m of modelos) {
     const x = r[m];
     if (x) L.push(`| ${m} | ${cats.map((c) => `${x.porCategoria[c]?.aprobadasPct ?? '—'}%`).join(' | ')} |`);
+  }
+  const conErrores = modelos.filter((m) => (errores[m]?.size ?? 0) > 0);
+  if (conErrores.length > 0) {
+    L.push('\n## Errores de la API (cuerpo completo)\n');
+    for (const m of conErrores) {
+      L.push(`**${m}**`);
+      for (const [msg, n] of errores[m] ?? []) L.push(`- (${n}x) ${msg}`);
+    }
   }
   L.push('\n## Hallazgos del router (código, igual para todos los modelos)\n');
   const sinRed = casos.filter((c) => c.esperado === 'escala' && router.get(c.id) === false).map((c) => c.id);
