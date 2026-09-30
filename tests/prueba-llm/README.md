@@ -23,9 +23,11 @@ Fijados en `evaluar.ts` (`CRITERIOS`) **antes** de correr. No se cambian despué
 3. `npm run prueba:llm -- --casos A01,R01,B01 --rep 1` → prueba de humo (centavos).
 4. `npm run prueba:llm` → prueba completa. Resultados en `tests/prueba-llm/resultados/<fecha>/` (`resumen.md` + un `.jsonl` por modelo con todo el detalle).
 
-Opciones: `--modelos a,b` · `--rep 3` · `--cuenta 1` (cuenta de Mandala en Chatwoot) · `--casos ID,ID` · `--concurrencia 3` · `--razonamiento apagado|normal`.
+Opciones: `--modelos a,b` · `--rep 3` · `--cuenta 1` (cuenta de Mandala en Chatwoot) · `--casos ID,ID` · `--concurrencia 3` · `--razonamiento auto|apagado|normal`.
 
-**Razonamiento.** Por defecto se APAGA (`reasoning.enabled=false` de OpenRouter) para todos los modelos. Motivo: el cerebro obliga a consultar una herramienta en cada mensaje (`tool_choice: required`) y los modelos que piensan por defecto lo rechazan (Qwen 3.8 Flash: error 400 de Alibaba). En producción se configura igual, por cliente, en Supabase: `clientes.config_extra` → `{"llmExtra": {"reasoning": {"enabled": false}}}`. Con `--razonamiento normal` no se manda nada.
+**Razonamiento.** En modo `auto` (por defecto) se APAGA (`reasoning.enabled=false` de OpenRouter) en cada modelo que lo permita; los que lo exigen (Gemini 3.5 Flash-Lite) se prueban con el suyo, y el resumen dice cuál usó cada uno. Motivo: el cerebro obliga a consultar una herramienta en cada mensaje (`tool_choice: required`) y los modelos que piensan por defecto lo rechazan (Qwen 3.8 Flash: error 400 de Alibaba). En producción se configura igual, por cliente, en Supabase: `clientes.config_extra` → `{"llmExtra": {"reasoning": {"enabled": false}}}`. `--razonamiento apagado` lo manda a todos y `--razonamiento normal` no manda nada.
+
+**Límite de velocidad (429).** El corredor reintenta hasta 3 veces (4, 12 y 30 s) y cuenta cuántos reintentos hizo cada modelo; si igual no responde, cuenta como error de la API.
 
 ## Archivos
 - `preguntas.json` — los casos, con qué debe pasar en cada uno y verificaciones automáticas.

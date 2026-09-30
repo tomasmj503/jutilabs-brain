@@ -11,6 +11,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import OpenAI from 'openai';
 import type { ClienteConfig, ContextoConversacion, HerramientaLLM, MensajeEntrante, TurnoEntrante } from '../../src/types/index.js';
 import {
   CRITERIOS, evaluar, extraerMontos, resumir,
@@ -48,7 +49,7 @@ const { values, positionals } = parseArgs({
     cuenta: { type: 'string', default: '1' },
     casos: { type: 'string' },
     concurrencia: { type: 'string', default: '3' },
-    razonamiento: { type: 'string', default: 'apagado' },
+    razonamiento: { type: 'string', default: 'auto' },
     salida: { type: 'string', default: 'tests/prueba-llm/resultados' },
   },
 });
@@ -56,15 +57,23 @@ const { values, positionals } = parseArgs({
 const cuentaChatwoot = Number(values.cuenta);
 const repeticiones = Math.max(1, Number(values.rep));
 const concurrencia = Math.max(1, Number(values.concurrencia));
-if (values.razonamiento !== 'apagado' && values.razonamiento !== 'normal') {
-  console.error('--razonamiento debe ser "apagado" (por defecto) o "normal" (no se manda nada; cada modelo usa su modo por defecto).');
+if (values.razonamiento !== 'auto' && values.razonamiento !== 'apagado' && values.razonamiento !== 'normal') {
+  console.error('--razonamiento debe ser "auto" (por defecto), "apagado" (se manda a todos) o "normal" (no se manda nada).');
   process.exit(1);
 }
-/** "apagado": se manda reasoning.enabled=false a todos (OpenRouter). Es lo que necesita el cerebro: tool_choice "required" en cada mensaje y respuestas rápidas. */
-const razonamientoApagado = values.razonamiento === 'apagado';
+
+type Modo = 'apagado' | 'normal';
+const pausa = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const estadoDe = (e: unknown): number | undefined => (e as { status?: number })?.status;
+const textoDeError = (e: unknown): string => `${e instanceof Error ? e.message : String(e)} ${JSON.stringify((e as { error?: unknown }).error ?? '')}`;
+
+/** Esperas entre reintentos cuando el proveedor limita la velocidad (429). Se cuentan por modelo y se muestran en el resumen. */
+const ESPERAS_429_MS = [4_000, 12_000, 30_000];
+const reintentos429 = new Map<string, number>();
 
 // Import dinámico: recién aquí se lee y valida el entorno (ya con el relleno puesto).
 const { cargarClientePorChatwootAccount } = await import('../../src/config/cliente.js');
+const { env, secretoPorRef } = await import('../../src/config/env.js');
 const { llamarLLM } = await import('../../src/llm/llamarLLM.js');
 const { construirSystemPrompt } = await import('../../src/llm/prompt.js');
 const { herramientas } = await import('../../src/llm/herramientas/index.js');
@@ -166,12 +175,50 @@ function mensajeEntrante(texto: string): MensajeEntrante {
   };
 }
 
+/**
+ * Qué modo de razonamiento usa cada modelo. "apagado" = reasoning.enabled=false: el cerebro obliga a consultar una herramienta en cada
+ * mensaje (tool_choice "required") y los modelos que piensan por defecto lo rechazan. Algunos modelos NO permiten apagarlo (Gemini 3.5
+ * Flash-Lite: "Reasoning is mandatory"): en modo "auto" se prueba con una llamada mínima y, si lo rechazan, se usa "normal".
+ */
+async function elegirModo(modelo: string): Promise<Modo> {
+  if (values.razonamiento === 'apagado' || values.razonamiento === 'normal') return values.razonamiento;
+  const cliente = new OpenAI({ apiKey: secretoPorRef(CLAVE_REF), baseURL: env.OPENROUTER_BASE_URL, timeout: 25_000, maxRetries: 0 });
+  for (let intento = 0; intento <= ESPERAS_429_MS.length; intento++) {
+    try {
+      const cuerpo = { model: modelo, messages: [{ role: 'user', content: 'Responde solo: ok' }], max_tokens: 20, reasoning: { enabled: false } };
+      await cliente.chat.completions.create(cuerpo as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
+      return 'apagado';
+    } catch (e) {
+      if (/mandatory|cannot be disabled/i.test(textoDeError(e))) return 'normal';
+      const espera = ESPERAS_429_MS[intento];
+      if (estadoDe(e) === 429 && espera !== undefined) { await pausa(espera); continue; }
+      return 'apagado'; // otro error: se deja "apagado" y la prueba real mostrará el problema
+    }
+  }
+  return 'apagado';
+}
+
+/** Reintenta si el proveedor limita la velocidad (429). Cualquier otro error se propaga tal cual. */
+async function conReintento429(modelo: string, llamadas: LlamadaHerramienta[], fn: () => ReturnType<typeof llamarLLM>): ReturnType<typeof llamarLLM> {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const espera = ESPERAS_429_MS[intento];
+      if (estadoDe(e) !== 429 || espera === undefined) throw e;
+      reintentos429.set(modelo, (reintentos429.get(modelo) ?? 0) + 1);
+      llamadas.length = 0; // lo que se consultó en el intento fallido no cuenta
+      await pausa(espera);
+    }
+  }
+}
+
 /** Un caso completo (uno o varios mensajes del huésped, en orden) contra UN modelo. Devuelve lo que pasó en cada mensaje. */
-async function ejecutarCaso(caso: Caso, modelo: string): Promise<Ejecucion[]> {
+async function ejecutarCaso(caso: Caso, modelo: string, modo: Modo): Promise<Ejecucion[]> {
   const { llmExtra: _propio, ...configExtraSinExtra } = cfg0.configExtra;
   const cfg: ClienteConfig = {
     ...cfg0, llmModelo: modelo, llmModeloRespaldo: null, openrouterKeyRef: CLAVE_REF,
-    configExtra: razonamientoApagado ? { ...configExtraSinExtra, llmExtra: { reasoning: { enabled: false } } } : configExtraSinExtra,
+    configExtra: modo === 'apagado' ? { ...configExtraSinExtra, llmExtra: { reasoning: { enabled: false } } } : configExtraSinExtra,
   };
   const historial: Array<{ rol: 'huesped' | 'bot'; contenido: string }> = [];
   const salidas: Ejecucion[] = [];
@@ -202,7 +249,7 @@ async function ejecutarCaso(caso: Caso, modelo: string): Promise<Ejecucion[]> {
       { rol: 'user' as const, contenido: texto },
     ];
     try {
-      const r = await llamarLLM(mensajes, herramientas.map((h) => envolver(h, llamadas)), { cfg, conv }, { forzarHerramienta: !saludo });
+      const r = await conReintento429(modelo, llamadas, () => llamarLLM(mensajes, herramientas.map((h) => envolver(h, llamadas)), { cfg, conv }, { forzarHerramienta: !saludo }));
       salidas.push({
         ...base, texto: r.texto, noSeElDato: r.noSeElDato, llamadas, sinModelo: false,
         latenciaMs: r.latenciaMs, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida,
@@ -254,19 +301,23 @@ async function correrPrueba(): Promise<void> {
   const dir = fileURLToPath(new URL(`./resultados/${marca}/`, import.meta.url));
   await mkdir(dir, { recursive: true });
   console.log(`Prueba ${marca}: ${modelos.length} modelos x ${casos.length} casos x ${repeticiones} repeticiones = ${modelos.length * casos.length * repeticiones} corridas`);
-  console.log(`Razonamiento: ${razonamientoApagado ? 'apagado (reasoning.enabled=false)' : 'normal (el que trae cada modelo)'}`);
+  console.log(`Razonamiento: ${values.razonamiento === 'auto' ? 'automático (se apaga si el modelo lo permite)' : values.razonamiento}`);
   console.log(`Modelos: ${modelos.join(', ')}${modelos.includes(cfg0.llmModelo) ? `  (referencia: ${cfg0.llmModelo} es el modelo actual del cliente)` : ''}\n`);
 
   const resumenes: Record<string, ReturnType<typeof resumir>> = {};
   const errores: Record<string, Map<string, number>> = {};
+  const modos: Record<string, Modo> = {};
+  const fallas: Record<string, string[]> = {};
   const hallazgosRouter = new Map<string, boolean>();
 
   for (const modelo of modelos) {
-    const tareas = casos.flatMap((caso) => Array.from({ length: repeticiones }, (_, rep) => async () => ({ caso, rep, salidas: await ejecutarCaso(caso, modelo) })));
+    const modo = await elegirModo(modelo);
+    modos[modelo] = modo;
+    const tareas = casos.flatMap((caso) => Array.from({ length: repeticiones }, (_, rep) => async () => ({ caso, rep, salidas: await ejecutarCaso(caso, modelo, modo) })));
     const original = { log: console.log, error: console.error };
     const silencio = (): void => undefined;
     let hechas = 0;
-    console.log(`▶ ${modelo}`);
+    console.log(`▶ ${modelo} (razonamiento ${modo})`);
     console.log = silencio; console.error = silencio; // llamarLLM imprime cada herramienta; aquí estorba
     let brutas: Awaited<ReturnType<(typeof tareas)[number]>>[];
     try {
@@ -293,19 +344,21 @@ async function correrPrueba(): Promise<void> {
     const distintos = new Map<string, number>();
     for (const c of corridas) if (c.ej.error) distintos.set(c.ej.error, (distintos.get(c.ej.error) ?? 0) + 1);
     errores[modelo] = distintos;
+    fallas[modelo] = corridas.filter((c) => !c.ev.ok && !c.ej.error).slice(0, 40).map((c) =>
+      `${c.caso.id} (rep ${c.rep + 1}): ${c.ev.detalle.join(' | ')} — noSe=${c.ej.noSeElDato}; herramientas=[${c.ej.llamadas.map((l) => l.nombre).join(', ')}]; texto: «${c.ej.texto.replace(/\s+/g, ' ').slice(0, 220)}»`);
   }
 
-  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
-  await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores));
+  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, modos, reintentos429: Object.fromEntries(reintentos429), criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
+  await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores, modos, fallas));
   console.log(`\nListo. Resultados en ${dir}`);
   console.log(await readFile(`${dir}resumen.md`, 'utf8'));
 }
 
 function resumenEnMarkdown(
   marca: string, modelos: string[], r: Record<string, ReturnType<typeof resumir>>, casos: Caso[], router: Map<string, boolean>,
-  errores: Record<string, Map<string, number>>,
+  errores: Record<string, Map<string, number>>, modos: Record<string, Modo>, fallas: Record<string, string[]>,
 ): string {
-  const L: string[] = [`# Resumen prueba LLM ${marca}\n`, `Razonamiento: **${razonamientoApagado ? 'apagado' : 'normal'}**\n`];
+  const L: string[] = [`# Resumen prueba LLM ${marca}\n`, `Razonamiento pedido: **${values.razonamiento}**\n`];
   L.push('Criterios (fijados antes de correr): monto inventado 0 · dijo algo prohibido 0 · escalamiento correcto ≥95% · falsa escalación ≤5% · herramienta correcta ≥95% · consistencia ≥90% · errores API ≤2% · latencia p95 ≤12 s\n');
   L.push('| Modelo | Aprobadas | Montos inventados | Prohibido | Escala bien | Falsa escal. | Herramienta | Consistencia | Error API | p50 / p95 | USD por 1000 turnos | Veredicto |');
   L.push('|---|---|---|---|---|---|---|---|---|---|---|---|');
@@ -329,6 +382,16 @@ function resumenEnMarkdown(
   for (const m of modelos) {
     const x = r[m];
     if (x) L.push(`| ${m} | ${cats.map((c) => `${x.porCategoria[c]?.aprobadasPct ?? '—'}%`).join(' | ')} |`);
+  }
+  L.push('\n## Razonamiento usado y límites de velocidad\n');
+  for (const m of modelos) L.push(`- ${m}: razonamiento **${modos[m] ?? '—'}**${modos[m] === 'normal' && values.razonamiento === 'auto' ? ' (el proveedor no deja apagarlo)' : ''}; reintentos por límite de velocidad (429): ${reintentos429.get(m) ?? 0}`);
+  const conFallas = modelos.filter((m) => (fallas[m]?.length ?? 0) > 0);
+  if (conFallas.length > 0) {
+    L.push('\n## Fallas por caso (sin contar errores de la API)\n');
+    for (const m of conFallas) {
+      L.push(`**${m}**`);
+      for (const f of fallas[m] ?? []) L.push(`- ${f}`);
+    }
   }
   const conErrores = modelos.filter((m) => (errores[m]?.size ?? 0) > 0);
   if (conErrores.length > 0) {

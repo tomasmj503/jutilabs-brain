@@ -868,7 +868,11 @@
           "marzo"
         ],
         [
-          "cupos"
+          "cupos",
+          "viajeros",
+          "lugares",
+          "plazas",
+          "personas"
         ]
       ],
       "prohibido": [],
