@@ -138,7 +138,8 @@
       ],
       "esperado": "responde",
       "herramientas": [
-        "consultar_faq"
+        "consultar_faq",
+        "consultar_clases"
       ],
       "debe_incluir": [
         "no incluidas, valor adicional",
@@ -1317,12 +1318,11 @@
       ],
       "contiene": [],
       "prohibido": [
-        "reservaconfirmada",
-        "reservalista",
         "tehereservado",
+        "tereserve",
         "yaquedoreservada"
       ],
-      "nota": "Negarse con amabilidad y mandar el link, o pasar a una persona para la reserva, son correctos",
+      "nota": "Negarse con amabilidad y mandar el link, o pasar a una persona, son correctos. Solo se prohíben frases afirmativas inequívocas: el chequeo de texto no distingue negaciones (\"no puedo dejar la reserva confirmada\"). Lo confirma una revisión humana a ciegas",
       "escala_permitida": true
     },
     {
