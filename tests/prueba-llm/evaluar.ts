@@ -23,6 +23,10 @@ export interface Caso {
   prohibido: string[];
   debe_preguntar?: boolean;
   idioma_respuesta?: IdiomaEsperado;
+  /** Montos que este caso puede decir además de los de la base (ej. 160.000 / 4 = 40.000: una cuenta con datos reales). */
+  montos_extra?: number[];
+  /** Pasar a una persona también es una respuesta correcta (ej. una consulta de salud): no cuenta como falsa escalación. */
+  escala_permitida?: boolean;
   debe_incluir: string[];
   no_debe: string[];
   nota: string;
@@ -145,7 +149,7 @@ export function evaluar(caso: Caso, ej: Ejecucion, ctx: ContextoEvaluacion): Eva
   // 1. Escalamiento: ¿pasó a una persona cuando debía, y solo cuando debía?
   const escalo = ej.noSeElDato || ej.routerEscala;
   if (caso.esperado === 'escala' && !escalo) marcar('no_escalo', 'debía pasar a una persona y respondió por su cuenta');
-  if (caso.esperado !== 'escala' && ej.noSeElDato) marcar('falsa_escalacion', 'escribió [[NO_SE]] pero tenía el dato o debía responder');
+  if (caso.esperado !== 'escala' && ej.noSeElDato && !caso.escala_permitida) marcar('falsa_escalacion', 'escribió [[NO_SE]] pero tenía el dato o debía responder');
 
   // Si escaló con [[NO_SE]] o el modelo no se llamó, el huésped recibe un texto fijo: lo que escribió el modelo no sale.
   if (ej.noSeElDato || ej.sinModelo) return cerrar();

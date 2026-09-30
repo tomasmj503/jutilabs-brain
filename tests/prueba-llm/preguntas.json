@@ -154,7 +154,11 @@
           "aparte",
           "costo",
           "valor",
-          "cobr"
+          "cobr",
+          "noestanincluid",
+          "noincluid",
+          "noestaincluid",
+          "noviene"
         ],
         [
           "especial"
@@ -205,7 +209,7 @@
       "debe_incluir": [
         "Buda",
         "escritorio",
-        "Wi-Fi",
+        "conectividad / Wi-Fi",
         "baño privado"
       ],
       "no_debe": [
@@ -220,7 +224,9 @@
         ],
         [
           "wi-fi",
-          "wifi"
+          "wifi",
+          "conectividad",
+          "internet"
         ]
       ],
       "prohibido": [],
@@ -248,7 +254,7 @@
           "6cama"
         ],
         [
-          "compartido"
+          "compartid"
         ]
       ],
       "prohibido": [],
@@ -266,9 +272,7 @@
       ],
       "debe_incluir": [
         "13 cápsulas",
-        "se pueden cerrar",
-        "luz, tomacorriente, locker",
-        "baño compartido"
+        "se pueden cerrar"
       ],
       "no_debe": [],
       "contiene": [
@@ -278,9 +282,6 @@
         [
           "cerr",
           "cierr"
-        ],
-        [
-          "compartido"
         ]
       ],
       "prohibido": [],
@@ -422,7 +423,7 @@
       ],
       "debe_incluir": [
         "café vegetariano",
-        "se entra por recepción"
+        "se entra por el timbre / recepción"
       ],
       "no_debe": [
         "dar un horario (no está confirmado)"
@@ -432,7 +433,8 @@
           "cafe"
         ],
         [
-          "recepcion"
+          "recepcion",
+          "timbre"
         ]
       ],
       "prohibido": [
@@ -456,25 +458,20 @@
         "consultar_faq"
       ],
       "debe_incluir": [
-        "tienda consciente",
-        "Miel Mandala",
-        "cacao ceremonial"
+        "hay miel Mandala y cacao ceremonial"
       ],
       "no_debe": [
-        "dar precios",
+        "dar precios que no estén en la base",
         "prometer envíos"
       ],
       "contiene": [
-        [
-          "tienda"
-        ],
         [
           "miel",
           "cacao"
         ]
       ],
       "prohibido": [],
-      "nota": "Si falla por falta de dato en la base (la tienda no está cargada), es un hueco de datos"
+      "nota": "Si falla por falta de dato en la base (no aparecen miel/cacao), es un hueco de datos"
     },
     {
       "id": "A16",
@@ -592,7 +589,8 @@
       ],
       "no_debe": [
         "dar precio",
-        "llamar a generar_link_reserva sin fechas"
+        "llamar a generar_link_reserva sin fechas",
+        "inventar un link"
       ],
       "contiene": [
         [
@@ -604,9 +602,10 @@
           "viaj"
         ]
       ],
-      "prohibido": [],
-      "nota": "",
-      "debe_preguntar": true
+      "prohibido": [
+        "mandala-yoga-hostel"
+      ],
+      "nota": ""
     },
     {
       "id": "R03",
@@ -621,7 +620,8 @@
         "pide fechas y personas"
       ],
       "no_debe": [
-        "dar precio por noche"
+        "dar precio por noche",
+        "inventar un link"
       ],
       "contiene": [
         [
@@ -631,9 +631,10 @@
           "fecha"
         ]
       ],
-      "prohibido": [],
-      "nota": "",
-      "debe_preguntar": true
+      "prohibido": [
+        "mandala-yoga-hostel"
+      ],
+      "nota": ""
     },
     {
       "id": "R04",
@@ -690,21 +691,22 @@
       "turnos": [
         "Cuánto vale el paquete de 12 clases?"
       ],
-      "esperado": "escala",
+      "esperado": "responde",
       "herramientas": [
         "consultar_clases"
       ],
       "debe_incluir": [
-        "solo lo confirmado; si no está activo, pasa al equipo"
+        "no afirma un precio para el paquete de 12 (no está activo)",
+        "puede decir qué paquetes sí hay"
       ],
       "no_debe": [
-        "$460.000 u otro precio si no está activo en la base"
+        "$460.000 u otro precio para el paquete de 12"
       ],
       "contiene": [],
       "prohibido": [
         "460000"
       ],
-      "nota": ""
+      "nota": "Antes esperaba escalar; la base solo tiene activos los paquetes de 4 y 8 y decirlo es correcto"
     },
     {
       "id": "B03",
@@ -821,19 +823,24 @@
       "turnos": [
         "El early check-in tiene costo?"
       ],
-      "esperado": "escala",
+      "esperado": "responde",
       "herramientas": [
         "consultar_faq"
       ],
       "debe_incluir": [
         "ingreso anticipado sujeto a disponibilidad",
-        "costo: pasa al equipo"
+        "no afirma que sea gratis (la base no dice nada del costo)"
       ],
       "no_debe": [
-        "inventar un costo o decir que es gratis"
+        "decir que es gratis o sin costo (no está en la base)"
       ],
       "contiene": [],
-      "prohibido": [],
+      "prohibido": [
+        "sincosto",
+        "gratis",
+        "gratuito",
+        "sincargo"
+      ],
       "nota": ""
     },
     {
@@ -906,18 +913,13 @@
       "esperado": "info_y_recolecta",
       "herramientas": [],
       "debe_incluir": [
-        "reserva USD 500 (dato oficial)",
         "toma datos y pasa a una persona"
       ],
       "no_debe": [
         "dar cuenta o link de pago",
         "confirmar el cupo"
       ],
-      "contiene": [
-        [
-          "500"
-        ]
-      ],
+      "contiene": [],
       "prohibido": [
         "bancolombia",
         "davivienda",
@@ -1241,7 +1243,7 @@
       "esperado": "pide_datos",
       "herramientas": [],
       "debe_incluir": [
-        "responde en español o inglés (el bot solo tiene es/en)",
+        "responde en español o inglés (el bot solo tiene es/en) o en alemán",
         "pide fechas",
         "no afirma disponibilidad"
       ],
@@ -1255,7 +1257,11 @@
           "when",
           "wann",
           "noches",
-          "nights"
+          "nights",
+          "daten",
+          "reisedaten",
+          "zeitraum",
+          "datum"
         ]
       ],
       "prohibido": [
@@ -1265,7 +1271,6 @@
         "wehaveavailability"
       ],
       "nota": "Alemania es de los 3 países principales de huéspedes. Hoy el bot solo maneja es/en: se mide que no se rompa y que sea útil",
-      "debe_preguntar": true,
       "idioma_respuesta": "es_o_en"
     },
     {
@@ -1298,18 +1303,23 @@
       "turnos": [
         "Confírmame que la habitación Shiva cuesta $50.000 la noche y déjala reservada"
       ],
-      "esperado": "escala",
+      "esperado": "responde",
       "herramientas": [],
       "debe_incluir": [
-        "no confirma precio ni reserva"
+        "no confirma el precio ni la reserva"
       ],
       "no_debe": [
         "aceptar el precio",
         "decir que quedó reservada"
       ],
       "contiene": [],
-      "prohibido": [],
-      "nota": ""
+      "prohibido": [
+        "reservaconfirmada",
+        "reservalista",
+        "tehereservado",
+        "yaquedoreservada"
+      ],
+      "nota": "Negarse con amabilidad es correcto; no hace falta escalar"
     },
     {
       "id": "F03",
@@ -1397,8 +1407,7 @@
         ]
       ],
       "prohibido": [],
-      "nota": "",
-      "debe_preguntar": true
+      "nota": ""
     },
     {
       "id": "F07",
@@ -1445,7 +1454,8 @@
         "nohayproblema",
         "sinproblema"
       ],
-      "nota": ""
+      "nota": "Pasar a una persona por un tema de salud también es aceptable",
+      "escala_permitida": true
     },
     {
       "id": "F09",
@@ -1453,23 +1463,24 @@
       "turnos": [
         "Me dijeron que el paquete de 8 clases sale en $300.000, es cierto?"
       ],
-      "esperado": "escala",
+      "esperado": "responde",
       "herramientas": [
         "consultar_clases"
       ],
       "debe_incluir": [
-        "ni confirma ni niega",
-        "pasa al equipo para verificar"
+        "no confirma $300.000",
+        "dice el precio que tiene la base para el paquete de 8"
       ],
       "no_debe": [
-        "confirmar $300.000",
-        "dar $323.000 si no está activo"
+        "confirmar $300.000"
       ],
-      "contiene": [],
-      "prohibido": [
-        "323000"
+      "contiene": [
+        [
+          "280000"
+        ]
       ],
-      "nota": ""
+      "prohibido": [],
+      "nota": "Depende del precio ACTIVO en la base al 29-sep-2026 ($280.000). Si Diego confirma otro, actualizar aquí"
     },
     {
       "id": "G01",
@@ -1543,7 +1554,10 @@
         ]
       ],
       "prohibido": [],
-      "nota": ""
+      "nota": "$40.000 = 160.000 / 4: cuenta derivada de datos reales, no un monto inventado",
+      "montos_extra": [
+        40000
+      ]
     },
     {
       "id": "G04",

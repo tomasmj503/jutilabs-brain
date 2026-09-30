@@ -23,6 +23,8 @@ Fijados en `evaluar.ts` (`CRITERIOS`) **antes** de correr. No se cambian despué
 3. `npm run prueba:llm -- --casos A01,R01,B01 --rep 1` → prueba de humo (centavos).
 4. `npm run prueba:llm` → prueba completa. Resultados en `tests/prueba-llm/resultados/<fecha>/` (`resumen.md` + un `.jsonl` por modelo con todo el detalle).
 
+**Recalificar sin gastar:** `npm run prueba:llm -- recalificar tests/prueba-llm/resultados/<carpeta>` vuelve a juzgar una prueba ya corrida con el `preguntas.json` y el `evaluar.ts` de ahora (no llama a ningún modelo). Sirve cuando se corrige un caso mal escrito. Guarda `resumen-recalificado.md`.
+
 Opciones: `--modelos a,b` · `--rep 3` · `--cuenta 1` (cuenta de Mandala en Chatwoot) · `--casos ID,ID` · `--concurrencia 3` · `--razonamiento auto|apagado|normal`.
 
 **Razonamiento.** En modo `auto` (por defecto) se APAGA (`reasoning.enabled=false` de OpenRouter) en cada modelo que lo permita; los que lo exigen (Gemini 3.5 Flash-Lite) se prueban con el suyo, y el resumen dice cuál usó cada uno. Motivo: el cerebro obliga a consultar una herramienta en cada mensaje (`tool_choice: required`) y los modelos que piensan por defecto lo rechazan (Qwen 3.8 Flash: error 400 de Alibaba). En producción se configura igual, por cliente, en Supabase: `clientes.config_extra` → `{"llmExtra": {"reasoning": {"enabled": false}}}`. `--razonamiento apagado` lo manda a todos y `--razonamiento normal` no manda nada.

@@ -92,6 +92,8 @@ const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: cfg0.zonaHoraria }).for
 
 if (positionals[0] === 'datos') {
   await volcarDatos();
+} else if (positionals[0] === 'recalificar') {
+  await recalificar(positionals[1]);
 } else {
   await correrPrueba();
 }
@@ -145,10 +147,10 @@ async function preciosActivos(): Promise<number[]> {
   return (data ?? []).flatMap((f) => (typeof f.precio === 'number' ? [f.precio] : []));
 }
 
-/** Montos permitidos para un caso: los fijos + los precios activos + los números que dijo el propio huésped (repetirlos no es inventar). */
-function montosPermitidos(base: ReadonlySet<number>, turnos: string[]): Set<number> {
-  const set = new Set<number>(base);
-  for (const t of turnos) for (const m of extraerMontos(t)) set.add(m);
+/** Montos permitidos para un caso: los fijos + los precios activos + los del propio caso + los números que dijo el huésped (repetirlos no es inventar). */
+function montosPermitidos(base: ReadonlySet<number>, caso: Caso): Set<number> {
+  const set = new Set<number>([...base, ...(caso.montos_extra ?? [])]);
+  for (const t of caso.turnos) for (const m of extraerMontos(t)) set.add(m);
   return set;
 }
 
@@ -284,6 +286,64 @@ async function conLimite<T>(tareas: Array<() => Promise<T>>, limite: number, alA
   return res;
 }
 
+/** Errores de la API distintos (con su conteo) y una línea por cada caso que falló, para el resumen. */
+function detalleDe(corridas: Corrida[]): { errores: Map<string, number>; fallas: string[] } {
+  const errores = new Map<string, number>();
+  for (const c of corridas) if (c.ej.error) errores.set(c.ej.error, (errores.get(c.ej.error) ?? 0) + 1);
+  const fallas = corridas.filter((c) => !c.ev.ok && !c.ej.error).slice(0, 60).map((c) =>
+    `${c.caso.id} (rep ${c.rep + 1}): ${c.ev.detalle.join(' | ')} — noSe=${c.ej.noSeElDato}; herramientas=[${c.ej.llamadas.map((l) => l.nombre).join(', ')}]; texto: «${c.ej.texto.replace(/\s+/g, ' ').slice(0, 220)}»`);
+  return { errores, fallas };
+}
+
+/**
+ * Vuelve a calificar una prueba YA CORRIDA con el preguntas.json y el evaluar.ts de ahora, sin llamar a ningún modelo (gratis).
+ * Sirve cuando se corrige un caso mal escrito: las respuestas de los modelos son las mismas, solo cambia cómo se juzgan.
+ */
+async function recalificar(carpeta: string | undefined): Promise<void> {
+  if (!carpeta) {
+    console.error('Uso: npm run prueba:llm -- recalificar tests/prueba-llm/resultados/<carpeta>');
+    process.exit(1);
+  }
+  const dir = carpeta.endsWith('/') ? carpeta : `${carpeta}/`;
+  const previo = JSON.parse(await readFile(`${dir}resumen.json`, 'utf8')) as {
+    marca: string; hoy: string; modos: Record<string, Modo>; reintentos429?: Record<string, number>;
+  };
+  const set = JSON.parse(await readFile(fileURLToPath(new URL('./preguntas.json', import.meta.url)), 'utf8')) as PreguntasJson;
+  const porId = new Map(set.casos.map((c) => [c.id, c]));
+  const base = new Set<number>([...set.montos_fijos_permitidos, ...(await preciosActivos())]);
+  const modelos = Object.keys(previo.modos);
+  for (const [m, n] of Object.entries(previo.reintentos429 ?? {})) reintentos429.set(m, n);
+
+  const resumenes: Record<string, ReturnType<typeof resumir>> = {};
+  const errores: Record<string, Map<string, number>> = {};
+  const fallas: Record<string, string[]> = {};
+  const router = new Map<string, boolean>();
+  const casosVistos = new Map<string, Caso>();
+  for (const modelo of modelos) {
+    const archivo = `${dir}${modelo.replace(/[^a-z0-9.]+/gi, '_')}.jsonl`;
+    const corridas: Corrida[] = [];
+    for (const linea of (await readFile(archivo, 'utf8')).split('\n').filter(Boolean)) {
+      const j = JSON.parse(linea) as { caso: string; rep: number; salidas: Ejecucion[] };
+      const caso = porId.get(j.caso);
+      const ultima = j.salidas[j.salidas.length - 1];
+      if (!caso || !ultima) continue;
+      const ev = evaluar(caso, ultima, { montosPermitidos: montosPermitidos(base, caso), hoy: previo.hoy });
+      corridas.push({ caso, rep: j.rep, ej: ultima, ev });
+      router.set(caso.id, ultima.routerEscala);
+      casosVistos.set(caso.id, caso);
+    }
+    resumenes[modelo] = resumir(corridas);
+    const d = detalleDe(corridas);
+    errores[modelo] = d.errores;
+    fallas[modelo] = d.fallas;
+  }
+  const md = resumenEnMarkdown(`${previo.marca} (recalificada)`, modelos, resumenes, [...casosVistos.values()], router, errores, previo.modos, fallas);
+  await writeFile(`${dir}resumen-recalificado.md`, md);
+  await writeFile(`${dir}resumen-recalificado.json`, JSON.stringify({ marca: previo.marca, hoy: previo.hoy, modos: previo.modos, criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
+  console.log(`Recalificada sin gastar nada. Guardado en ${dir}resumen-recalificado.md\n`);
+  console.log(md);
+}
+
 async function correrPrueba(): Promise<void> {
   if (!process.env[CLAVE_REF]) {
     console.error(`Falta la variable ${CLAVE_REF} (clave de OpenRouter para esta prueba, con tope de gasto). Ponla en tu .env local.`);
@@ -332,7 +392,7 @@ async function correrPrueba(): Promise<void> {
     for (const b of brutas) {
       const ultima = b.salidas[b.salidas.length - 1];
       if (!ultima) continue;
-      const permitidos = montosPermitidos(base, b.caso.turnos);
+      const permitidos = montosPermitidos(base, b.caso);
       const ev = evaluar(b.caso, ultima, { montosPermitidos: permitidos, hoy });
       corridas.push({ caso: b.caso, rep: b.rep, ej: ultima, ev });
       hallazgosRouter.set(b.caso.id, ultima.routerEscala);
@@ -341,11 +401,9 @@ async function correrPrueba(): Promise<void> {
     const slug = modelo.replace(/[^a-z0-9.]+/gi, '_');
     await writeFile(`${dir}${slug}.jsonl`, `${lineas.join('\n')}\n`);
     resumenes[modelo] = resumir(corridas);
-    const distintos = new Map<string, number>();
-    for (const c of corridas) if (c.ej.error) distintos.set(c.ej.error, (distintos.get(c.ej.error) ?? 0) + 1);
-    errores[modelo] = distintos;
-    fallas[modelo] = corridas.filter((c) => !c.ev.ok && !c.ej.error).slice(0, 40).map((c) =>
-      `${c.caso.id} (rep ${c.rep + 1}): ${c.ev.detalle.join(' | ')} — noSe=${c.ej.noSeElDato}; herramientas=[${c.ej.llamadas.map((l) => l.nombre).join(', ')}]; texto: «${c.ej.texto.replace(/\s+/g, ' ').slice(0, 220)}»`);
+    const detalle = detalleDe(corridas);
+    errores[modelo] = detalle.errores;
+    fallas[modelo] = detalle.fallas;
   }
 
   await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, modos, reintentos429: Object.fromEntries(reintentos429), criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));

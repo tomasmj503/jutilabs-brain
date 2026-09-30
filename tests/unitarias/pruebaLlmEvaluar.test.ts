@@ -55,6 +55,10 @@ describe('evaluar — escalamiento', () => {
     expect(r.ok).toBe(false);
     expect(r.graves).toEqual(['no_escalo']);
   });
+  it('escala_permitida: pasar a una persona también es correcto (ej. consulta de salud)', () => {
+    expect(evaluar(caso({ escala_permitida: true }), ej({ noSeElDato: true, texto: '' }), ctx).ok).toBe(true);
+    expect(evaluar(caso({ escala_permitida: true }), ej(), ctx).ok).toBe(true);
+  });
   it('caso "responde": [[NO_SE]] es falsa escalación (no grave)', () => {
     const r = evaluar(caso(), ej({ noSeElDato: true, texto: '' }), ctx);
     expect(r.fallas).toEqual(['falsa_escalacion']);
