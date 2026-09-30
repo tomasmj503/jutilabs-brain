@@ -55,6 +55,21 @@ describe('evaluar — escalamiento', () => {
     expect(r.ok).toBe(false);
     expect(r.graves).toEqual(['no_escalo']);
   });
+  const pasar = { nombre: 'pasar_a_persona', args: {}, resultado: { ok: true } };
+  it('caso "escala": llamar a pasar_a_persona cuenta como escalar', () => {
+    expect(evaluar(caso({ esperado: 'escala' }), ej({ llamadas: [pasar] }), ctx).ok).toBe(true);
+  });
+  it('caso "escala": pasar_a_persona con error no cuenta', () => {
+    const roto = { nombre: 'pasar_a_persona', args: {}, resultado: { error: 'x' } };
+    expect(evaluar(caso({ esperado: 'escala' }), ej({ llamadas: [roto] }), ctx).graves).toEqual(['no_escalo']);
+  });
+  it('caso "responde": pasar_a_persona pausa el bot sin necesidad = falsa escalación', () => {
+    expect(evaluar(caso(), ej({ llamadas: [pasar] }), ctx).fallas).toEqual(['falsa_escalacion']);
+  });
+  it('caso "info_y_recolecta": pasar_a_persona es lo correcto, [[NO_SE]] pierde la información', () => {
+    expect(evaluar(caso({ esperado: 'info_y_recolecta' }), ej({ llamadas: [pasar] }), ctx).ok).toBe(true);
+    expect(evaluar(caso({ esperado: 'info_y_recolecta' }), ej({ noSeElDato: true, texto: '' }), ctx).fallas).toEqual(['falsa_escalacion']);
+  });
   it('escala_permitida: pasar a una persona también es correcto (ej. consulta de salud)', () => {
     expect(evaluar(caso({ escala_permitida: true }), ej({ noSeElDato: true, texto: '' }), ctx).ok).toBe(true);
     expect(evaluar(caso({ escala_permitida: true }), ej(), ctx).ok).toBe(true);

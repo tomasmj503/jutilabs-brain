@@ -697,7 +697,7 @@
       ],
       "debe_incluir": [
         "no afirma un precio para el paquete de 12 (no está activo)",
-        "puede decir qué paquetes sí hay"
+        "puede decir qué paquetes sí hay, y pasar la consulta a una persona"
       ],
       "no_debe": [
         "$460.000 u otro precio para el paquete de 12"
@@ -706,7 +706,8 @@
       "prohibido": [
         "460000"
       ],
-      "nota": "Antes esperaba escalar; la base solo tiene activos los paquetes de 4 y 8 y decirlo es correcto"
+      "nota": "Responder lo que hay (paquetes de 4 y 8) o pasar a una persona son correctos; lo que no vale es inventar un precio",
+      "escala_permitida": true
     },
     {
       "id": "B03",
@@ -829,7 +830,8 @@
       ],
       "debe_incluir": [
         "ingreso anticipado sujeto a disponibilidad",
-        "no afirma que sea gratis (la base no dice nada del costo)"
+        "no afirma que sea gratis (la base no dice nada del costo)",
+        "o pasa la consulta a una persona"
       ],
       "no_debe": [
         "decir que es gratis o sin costo (no está en la base)"
@@ -841,7 +843,8 @@
         "gratuito",
         "sincargo"
       ],
-      "nota": ""
+      "nota": "",
+      "escala_permitida": true
     },
     {
       "id": "C01",

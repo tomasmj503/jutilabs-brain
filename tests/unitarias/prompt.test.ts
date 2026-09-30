@@ -17,13 +17,21 @@ describe('construirSystemPrompt', () => {
     expect(p).toContain('El huésped solo saludó');
     expect(p).toContain('No des precios, horarios ni ningún otro dato');
   });
-  it('[[NO_SE]] es solo para cuando falta el dato: un tema de la lista no basta para escribirlo', () => {
+  it('[[NO_SE]] es solo cuando no hay NINGÚN dato; para pedir a una persona se usa la herramienta', () => {
     const p = construirSystemPrompt({ ...cfg, temasQueEscalan: ['india', 'retiros'] } as ClienteConfig, conv);
-    expect(p).toContain('Si tienes el dato, respóndelo y NO escribas [[NO_SE]]');
+    expect(p).toContain('Si no tienes NINGÚN dato para responder, escribe al final exactamente [[NO_SE]]');
+    expect(p).toContain('NO escribas [[NO_SE]]; lo que falte, dile que lo confirma el equipo');
+    expect(p).toContain('llama a la herramienta pasar_a_persona');
+    expect(p).toContain('Nunca prometas "voy a pasar tu consulta al equipo" sin llamarla');
     expect(p).toContain('india, retiros');
     expect(p).toContain('NO escribas [[NO_SE]] solo por eso');
     // la regla vieja ("o el tema debe pasar a una persona, escribe [[NO_SE]]") contradecía a la lista de temas
     expect(p).not.toContain('o el tema debe pasar a una persona, escribe');
+  });
+  it('prohíbe decir que algo es gratis o sin costo si no está en los datos, y da salida a lo que no es del negocio', () => {
+    const p = construirSystemPrompt(cfg, conv);
+    expect(p).toContain('Nunca digas que algo es gratis, sin costo o está incluido si no aparece en los datos');
+    expect(p).toContain('no tiene nada que ver con este negocio');
   });
   it('sin temas que escalan, no agrega esa sección', () => {
     expect(construirSystemPrompt(cfg, conv)).not.toContain('TEMAS QUE PASAN A UNA PERSONA');
