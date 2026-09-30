@@ -127,6 +127,19 @@ const busquedaVacia = (nombre: string, r: unknown): boolean =>
   nombre === 'consultar_faq' && esObjeto(r) && Array.isArray(r.faq) && r.faq.length === 0
   && Array.isArray(r.politicas) && r.politicas.length === 0;
 
+/**
+ * Montos que el bot ya tenía respaldados en los mensajes ANTERIORES de una conversación de varios turnos: lo que devolvieron
+ * las herramientas y lo que él mismo dijo antes. Repetirlos no es inventar (ej. "y cuánto es la reserva?" tras hablar de India).
+ */
+export function montosDeSalidas(salidas: readonly Ejecucion[]): number[] {
+  const montos: number[] = [];
+  for (const s of salidas) {
+    montos.push(...extraerMontos(s.texto));
+    for (const l of s.llamadas) montos.push(...extraerMontos(JSON.stringify(l.resultado ?? null)));
+  }
+  return montos;
+}
+
 export interface ContextoEvaluacion {
   /** Montos que el modelo SÍ puede decir aunque ninguna herramienta los haya devuelto (precios activos + fijos del set + lo que dijo el huésped). */
   montosPermitidos: ReadonlySet<number>;

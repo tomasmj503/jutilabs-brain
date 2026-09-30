@@ -38,7 +38,8 @@ Opciones: `--modelos a,b` · `--rep 3` · `--cuenta 1` (cuenta de Mandala en Cha
 
 ## Límites conocidos
 - El modelo de respaldo se apaga a propósito para medir cada modelo solo; producción sí lo usa.
-- No usa `llamarLLMConReintento`: mide la confiabilidad "cruda" (producción reintenta una vez si falla rápido).
+- Usa el mismo reintento de producción (`llamarLLMConReintento`: una vez si falla rápido), pero sin modelo de respaldo, para medir cada modelo solo.
+- En conversaciones de varios mensajes, un monto que el bot ya dijo antes o que devolvió una herramienta antes no cuenta como inventado.
 - No detecta montos escritos como "66 mil pesos".
 - El chequeo de idioma es una heurística (es/en). El alemán solo se mide como "no se rompe y es útil": el bot solo maneja es/en.
 - Los precios de la tabla de costos son de lista (29-sep-2026); confirmar en OpenRouter antes de decidir.

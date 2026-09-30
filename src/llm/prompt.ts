@@ -22,8 +22,8 @@ export function construirSystemPrompt(
     + `- Si no tienes NINGÚN dato para responder, escribe al final exactamente ${MARCA_NO_SE}. Si tienes el dato o parte de él, respóndelo y NO escribas ${MARCA_NO_SE}.\n`
     + `- Si el huésped necesita a una persona (algo que tú no puedes resolver o decidir: reembolsos, descuentos, grupos, eventos, quejas, un tema de la lista de abajo) o le falta un dato que tú no tienes, `
     + `primero consulta las herramientas de información y responde con TODO lo que sepas (datos, precios, fechas); después llama a ${HERRAMIENTA_PASAR_A_PERSONA} y termina diciendo que una persona del equipo continuará. `
-    + `${HERRAMIENTA_PASAR_A_PERSONA} NO reemplaza tu respuesta; si pudiste responder por completo, no la llames. Nunca prometas "voy a pasar tu consulta al equipo" sin llamarla: sin la herramienta nadie recibe el aviso.\n`
-    + `- Si el mensaje no tiene nada que ver con este negocio, responde con amabilidad que solo puedes ayudar con sus temas y NO escribas ${MARCA_NO_SE}.`,
+    + `${HERRAMIENTA_PASAR_A_PERSONA} NO reemplaza tu respuesta; si pudiste responder por completo, no la llames. Si le dices al huésped que el equipo va a confirmar, revisar o contactarlo (o que "pasas su consulta"), DEBES llamarla: sin la herramienta nadie recibe el aviso.\n`
+    + `- Si el mensaje no tiene nada que ver con este negocio (tareas, otros temas), responde con amabilidad que solo puedes ayudar con sus temas. En ese caso NUNCA escribas ${MARCA_NO_SE} ni llames a ${HERRAMIENTA_PASAR_A_PERSONA}.`,
   ];
 
   if (esSaludo) {

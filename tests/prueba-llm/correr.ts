@@ -14,7 +14,7 @@ import { parseArgs } from 'node:util';
 import OpenAI from 'openai';
 import type { ClienteConfig, ContextoConversacion, HerramientaLLM, MensajeEntrante, TurnoEntrante } from '../../src/types/index.js';
 import {
-  CRITERIOS, evaluar, extraerMontos, resumir,
+  CRITERIOS, evaluar, extraerMontos, montosDeSalidas, resumir,
   type Caso, type Corrida, type Ejecucion, type LlamadaHerramienta,
 } from './evaluar.js';
 
@@ -75,6 +75,7 @@ const reintentos429 = new Map<string, number>();
 const { cargarClientePorChatwootAccount } = await import('../../src/config/cliente.js');
 const { env, secretoPorRef } = await import('../../src/config/env.js');
 const { llamarLLM } = await import('../../src/llm/llamarLLM.js');
+const { llamarLLMConReintento } = await import('../../src/llm/conReintento.js');
 const { construirSystemPrompt } = await import('../../src/llm/prompt.js');
 const { herramientas } = await import('../../src/llm/herramientas/index.js');
 const { rutear } = await import('../../src/router/index.js');
@@ -148,8 +149,8 @@ async function preciosActivos(): Promise<number[]> {
 }
 
 /** Montos permitidos para un caso: los fijos + los precios activos + los del propio caso + los números que dijo el huésped (repetirlos no es inventar). */
-function montosPermitidos(base: ReadonlySet<number>, caso: Caso): Set<number> {
-  const set = new Set<number>([...base, ...(caso.montos_extra ?? [])]);
+function montosPermitidos(base: ReadonlySet<number>, caso: Caso, salidas: readonly Ejecucion[]): Set<number> {
+  const set = new Set<number>([...base, ...(caso.montos_extra ?? []), ...montosDeSalidas(salidas)]);
   for (const t of caso.turnos) for (const m of extraerMontos(t)) set.add(m);
   return set;
 }
@@ -251,7 +252,7 @@ async function ejecutarCaso(caso: Caso, modelo: string, modo: Modo): Promise<Eje
       { rol: 'user' as const, contenido: texto },
     ];
     try {
-      const r = await conReintento429(modelo, llamadas, () => llamarLLM(mensajes, herramientas.map((h) => envolver(h, llamadas)), { cfg, conv }, { forzarHerramienta: !saludo }));
+      const r = await conReintento429(modelo, llamadas, () => llamarLLMConReintento(mensajes, herramientas.map((h) => envolver(h, llamadas)), { cfg, conv }, { forzarHerramienta: !saludo }));
       salidas.push({
         ...base, texto: r.texto, noSeElDato: r.noSeElDato, llamadas, sinModelo: false,
         latenciaMs: r.latenciaMs, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida,
@@ -327,7 +328,7 @@ async function recalificar(carpeta: string | undefined): Promise<void> {
       const caso = porId.get(j.caso);
       const ultima = j.salidas[j.salidas.length - 1];
       if (!caso || !ultima) continue;
-      const ev = evaluar(caso, ultima, { montosPermitidos: montosPermitidos(base, caso), hoy: previo.hoy });
+      const ev = evaluar(caso, ultima, { montosPermitidos: montosPermitidos(base, caso, j.salidas), hoy: previo.hoy });
       corridas.push({ caso, rep: j.rep, ej: ultima, ev });
       router.set(caso.id, ultima.routerEscala);
       casosVistos.set(caso.id, caso);
@@ -392,7 +393,7 @@ async function correrPrueba(): Promise<void> {
     for (const b of brutas) {
       const ultima = b.salidas[b.salidas.length - 1];
       if (!ultima) continue;
-      const permitidos = montosPermitidos(base, b.caso);
+      const permitidos = montosPermitidos(base, b.caso, b.salidas);
       const ev = evaluar(b.caso, ultima, { montosPermitidos: permitidos, hoy });
       corridas.push({ caso: b.caso, rep: b.rep, ej: ultima, ev });
       hallazgosRouter.set(b.caso.id, ultima.routerEscala);

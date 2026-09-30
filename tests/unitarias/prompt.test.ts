@@ -22,7 +22,8 @@ describe('construirSystemPrompt', () => {
     expect(p).toContain('Si no tienes NINGÚN dato para responder, escribe al final exactamente [[NO_SE]]');
     expect(p).toContain('primero consulta las herramientas de información y responde con TODO lo que sepas');
     expect(p).toContain('pasar_a_persona NO reemplaza tu respuesta');
-    expect(p).toContain('Nunca prometas "voy a pasar tu consulta al equipo" sin llamarla');
+    expect(p).toContain('Si le dices al huésped que el equipo va a confirmar, revisar o contactarlo');
+    expect(p).toContain('DEBES llamarla');
     expect(p).toContain('india, retiros');
     expect(p).toContain('NO escribas [[NO_SE]] solo por eso');
     // la regla vieja ("o el tema debe pasar a una persona, escribe [[NO_SE]]") contradecía a la lista de temas
@@ -32,6 +33,7 @@ describe('construirSystemPrompt', () => {
     const p = construirSystemPrompt(cfg, conv);
     expect(p).toContain('Nunca digas que algo es gratis, sin costo o está incluido si no aparece en los datos');
     expect(p).toContain('no tiene nada que ver con este negocio');
+    expect(p).toContain('NUNCA escribas [[NO_SE]] ni llames a pasar_a_persona');
   });
   it('sin temas que escalan, no agrega esa sección', () => {
     expect(construirSystemPrompt(cfg, conv)).not.toContain('TEMAS QUE PASAN A UNA PERSONA');

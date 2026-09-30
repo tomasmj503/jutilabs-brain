@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CRITERIOS, evaluar, extraerMontos, fechaEsperada, percentil, plano, resumir,
+  CRITERIOS, evaluar, extraerMontos, fechaEsperada, montosDeSalidas, percentil, plano, resumir,
   type Caso, type Corrida, type Ejecucion,
 } from '../prueba-llm/evaluar.js';
 
@@ -32,6 +32,14 @@ describe('extraerMontos', () => {
   it('no confunde otros números con dinero', () => {
     expect(extraerMontos('Estamos en la Carrera 77A #63-21, a 10 minutos, 13 cápsulas, 6 camas')).toEqual([]);
     expect(extraerMontos('check-in a la 1:00 p. m. del 13 al 29 de marzo')).toEqual([]);
+  });
+});
+
+describe('montosDeSalidas', () => {
+  it('junta lo que dijo el bot y lo que devolvieron las herramientas en los turnos anteriores', () => {
+    const turno1 = ej({ texto: 'India: desde USD 2.590 (Early Bird USD 2.790)', llamadas: [{ nombre: 'consultar_faq', args: {}, resultado: { faq: [{ r: 'regular USD 2.990' }] } }] });
+    expect(montosDeSalidas([turno1]).sort((a, b) => a - b)).toEqual([2590, 2790, 2990]);
+    expect(montosDeSalidas([])).toEqual([]);
   });
 });
 
