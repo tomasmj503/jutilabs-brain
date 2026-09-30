@@ -48,6 +48,7 @@ const { values, positionals } = parseArgs({
     cuenta: { type: 'string', default: '1' },
     casos: { type: 'string' },
     concurrencia: { type: 'string', default: '3' },
+    razonamiento: { type: 'string', default: 'apagado' },
     salida: { type: 'string', default: 'tests/prueba-llm/resultados' },
   },
 });
@@ -55,6 +56,12 @@ const { values, positionals } = parseArgs({
 const cuentaChatwoot = Number(values.cuenta);
 const repeticiones = Math.max(1, Number(values.rep));
 const concurrencia = Math.max(1, Number(values.concurrencia));
+if (values.razonamiento !== 'apagado' && values.razonamiento !== 'normal') {
+  console.error('--razonamiento debe ser "apagado" (por defecto) o "normal" (no se manda nada; cada modelo usa su modo por defecto).');
+  process.exit(1);
+}
+/** "apagado": se manda reasoning.enabled=false a todos (OpenRouter). Es lo que necesita el cerebro: tool_choice "required" en cada mensaje y respuestas rápidas. */
+const razonamientoApagado = values.razonamiento === 'apagado';
 
 // Import dinámico: recién aquí se lee y valida el entorno (ya con el relleno puesto).
 const { cargarClientePorChatwootAccount } = await import('../../src/config/cliente.js');
@@ -161,7 +168,11 @@ function mensajeEntrante(texto: string): MensajeEntrante {
 
 /** Un caso completo (uno o varios mensajes del huésped, en orden) contra UN modelo. Devuelve lo que pasó en cada mensaje. */
 async function ejecutarCaso(caso: Caso, modelo: string): Promise<Ejecucion[]> {
-  const cfg: ClienteConfig = { ...cfg0, llmModelo: modelo, llmModeloRespaldo: null, openrouterKeyRef: CLAVE_REF };
+  const { llmExtra: _propio, ...configExtraSinExtra } = cfg0.configExtra;
+  const cfg: ClienteConfig = {
+    ...cfg0, llmModelo: modelo, llmModeloRespaldo: null, openrouterKeyRef: CLAVE_REF,
+    configExtra: razonamientoApagado ? { ...configExtraSinExtra, llmExtra: { reasoning: { enabled: false } } } : configExtraSinExtra,
+  };
   const historial: Array<{ rol: 'huesped' | 'bot'; contenido: string }> = [];
   const salidas: Ejecucion[] = [];
   let idioma = cfg.idiomaDefault;
@@ -243,6 +254,7 @@ async function correrPrueba(): Promise<void> {
   const dir = fileURLToPath(new URL(`./resultados/${marca}/`, import.meta.url));
   await mkdir(dir, { recursive: true });
   console.log(`Prueba ${marca}: ${modelos.length} modelos x ${casos.length} casos x ${repeticiones} repeticiones = ${modelos.length * casos.length * repeticiones} corridas`);
+  console.log(`Razonamiento: ${razonamientoApagado ? 'apagado (reasoning.enabled=false)' : 'normal (el que trae cada modelo)'}`);
   console.log(`Modelos: ${modelos.join(', ')}${modelos.includes(cfg0.llmModelo) ? `  (referencia: ${cfg0.llmModelo} es el modelo actual del cliente)` : ''}\n`);
 
   const resumenes: Record<string, ReturnType<typeof resumir>> = {};
@@ -283,7 +295,7 @@ async function correrPrueba(): Promise<void> {
     errores[modelo] = distintos;
   }
 
-  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
+  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
   await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores));
   console.log(`\nListo. Resultados en ${dir}`);
   console.log(await readFile(`${dir}resumen.md`, 'utf8'));
@@ -293,7 +305,7 @@ function resumenEnMarkdown(
   marca: string, modelos: string[], r: Record<string, ReturnType<typeof resumir>>, casos: Caso[], router: Map<string, boolean>,
   errores: Record<string, Map<string, number>>,
 ): string {
-  const L: string[] = [`# Resumen prueba LLM ${marca}\n`];
+  const L: string[] = [`# Resumen prueba LLM ${marca}\n`, `Razonamiento: **${razonamientoApagado ? 'apagado' : 'normal'}**\n`];
   L.push('Criterios (fijados antes de correr): monto inventado 0 · dijo algo prohibido 0 · escalamiento correcto ≥95% · falsa escalación ≤5% · herramienta correcta ≥95% · consistencia ≥90% · errores API ≤2% · latencia p95 ≤12 s\n');
   L.push('| Modelo | Aprobadas | Montos inventados | Prohibido | Escala bien | Falsa escal. | Herramienta | Consistencia | Error API | p50 / p95 | USD por 1000 turnos | Veredicto |');
   L.push('|---|---|---|---|---|---|---|---|---|---|---|---|');

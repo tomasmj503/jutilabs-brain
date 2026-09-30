@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import type { ClienteConfig, ContextoConversacion, HerramientaLLM, RespuestaLLM } from '../types/index.js';
 import { env, secretoPorRef } from '../config/env.js';
+import { parametrosExtra } from './parametrosExtra.js';
 
 const MARCA_NO_SE = '[[NO_SE]]';
 const MAX_RONDAS_HERRAMIENTAS = 3;
@@ -43,14 +44,17 @@ async function conversar(
   for (let ronda = 0; ronda <= MAX_RONDAS_HERRAMIENTAS; ronda++) {
     const puedeUsarHerramientas = tools.length > 0 && ronda < MAX_RONDAS_HERRAMIENTAS;
 
-    const r = await cliente.chat.completions.create({
+    const cuerpo = {
+      // Parámetros extra del cliente (ej. reasoning). Van primero: nada de lo de abajo se puede pisar.
+      ...parametrosExtra(ctx.cfg),
       model: modelo,
       messages: msgs,
       temperature: ctx.cfg.llmTemperatura,
       max_tokens: 500,
       // Primera ronda: el modelo DEBE consultar una herramienta (no puede responder de memoria).
       ...(puedeUsarHerramientas ? { tools, tool_choice: forzarHerramienta && ronda === 0 ? ('required' as const) : ('auto' as const) } : {}),
-    });
+    };
+    const r = await cliente.chat.completions.create(cuerpo as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
 
     tokensEntrada += r.usage?.prompt_tokens ?? 0;
     tokensSalida += r.usage?.completion_tokens ?? 0;
