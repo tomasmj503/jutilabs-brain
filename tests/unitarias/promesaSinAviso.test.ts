@@ -1,0 +1,83 @@
+import { describe, it, expect, vi } from 'vitest';
+// Misma preparación que pasarAPersona.test.ts: se apaga la conexión a la base, aquí solo se prueba texto.
+vi.mock('../../src/config/env.js', () => ({ env: {}, secretoPorRef: () => 'x' }));
+vi.mock('../../src/db/supabase.js', () => ({ supabase: {} }));
+
+const { promesaDePasarConsulta, motivoParaAvisarAlEquipo } = await import('../../src/ingesta/avisoDeEquipo.js');
+
+describe('promesaDePasarConsulta: promesas que SÍ deben avisar al equipo', () => {
+  const promesas = [
+    // Respuestas reales de DeepSeek en la prueba de LLM (C08 rep 2 y C10 rep 1 y 2), sin llamar a la herramienta
+    'Para un grupo de 40 personas ya es una experiencia que se arma con el equipo, así que le paso tu consulta ahora mismo para que lo diseñen contigo. ✨',
+    'Los descuentos por estadías largas los maneja el equipo directamente, así que paso tu consulta para que te propongan la mejor opción.',
+    'Con eso te comparto el enlace de reserva y les paso tu consulta para que te confirmen la mejor tarifa. Te van a escribir pronto 🌿',
+    // Variantes en español
+    'El equipo te confirma el valor en un momento.',
+    'El equipo te confirmará la disponibilidad.',
+    'Una persona del equipo te escribe hoy mismo.',
+    'Alguien del equipo se pondrá en contacto contigo.',
+    'Ya pasé tu consulta al equipo 🙏',
+    'Voy a pasar tu solicitud al equipo.',
+    'Te contactarán pronto para confirmar.',
+    // Inglés
+    'The team will get back to you shortly.',
+    "I'll pass your question to the team.",
+    'Someone from the team will reach out to you today.',
+  ];
+  it.each(promesas)('detecta: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(true);
+  });
+});
+
+describe('promesaDePasarConsulta: frases normales u ofertas que NO deben avisar', () => {
+  const normales = [
+    'Al llegar, el equipo te recibe en recepción y te muestra tu habitación.',
+    'El equipo de recepción está disponible las 24 horas.',
+    'Cuando llegues, el equipo te ayuda con el check-in.',
+    'La tarifa especial para huéspedes la confirma el equipo al momento del check-in.',
+    // Oferta, no promesa: de B06 rep 0. Avisar aquí pausaría el bot antes de que el huésped responda.
+    '¿Te gustaría que el equipo te confirme la tarifa de huésped? Quedo atenta para pasar tu consulta 🙏',
+    'Te comparto el enlace de reserva con tus fechas.',
+    'Puedes escribirnos por aquí cuando quieras.',
+    'Las clases las guía Omkar Diego.',
+    'The team welcomes you at reception.',
+    'Reception is open 24 hours.',
+    '',
+  ];
+  it.each(normales)('no dispara: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+});
+
+describe('motivoParaAvisarAlEquipo con el texto que salió al huésped', () => {
+  it('promesa sin llamar a la herramienta: avisa (fuera_de_alcance)', () => {
+    expect(motivoParaAvisarAlEquipo(null, ['consultar_faq'], 'Paso tu consulta al equipo 🙏')).toBe('fuera_de_alcance');
+  });
+  it('texto normal sin herramienta: no avisa', () => {
+    expect(motivoParaAvisarAlEquipo(null, ['consultar_faq'], 'El equipo te recibe en recepción.')).toBeNull();
+  });
+  it('sin texto (llamadas antiguas): se comporta como antes', () => {
+    expect(motivoParaAvisarAlEquipo(null, ['consultar_faq'])).toBeNull();
+    expect(motivoParaAvisarAlEquipo(null, ['consultar_faq', 'pasar_a_persona'])).toBe('fuera_de_alcance');
+  });
+  it('el tema de alto valor del router sigue mandando (no se avisa dos veces)', () => {
+    expect(motivoParaAvisarAlEquipo('pidio_humano', ['consultar_faq'], 'Paso tu consulta al equipo')).toBe('pidio_humano');
+  });
+});
+
+describe('promesaDePasarConsulta: condicionales vs. promesas reales (respuestas de la prueba de LLM)', () => {
+  it.each([
+    'Sí, paso tu consulta al equipo.',
+    'Del paquete de 12 clases no tengo precio registrado, así que le paso tu consulta al equipo para que te lo confirme.',
+    'A team member will follow up with you about availability and next steps ✨',
+  ])('detecta: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(true);
+  });
+  it.each([
+    'Si me compartes tus fechas de llegada y cuántas personas serían, te genero el link de reserva directa y el equipo te confirma el valor exacto.',
+    'Si quieres, paso tu consulta al equipo.',
+    'If you share your dates, the team will get back to you with the exact price.',
+  ])('no dispara (condicional): %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+});

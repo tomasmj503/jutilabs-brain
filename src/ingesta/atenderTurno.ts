@@ -146,8 +146,9 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
     origen: 'llm', modelo: resp.modelo, tokensEntrada: resp.tokensEntrada,
     tokensSalida: resp.tokensSalida, latenciaMs: resp.latenciaMs, herramientas: resp.herramientasUsadas,
   });
-  // Tema de alto valor (router) o el modelo pidió a una persona (herramienta pasar_a_persona): se avisa al equipo y se pausa.
-  await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas));
+  // Tema de alto valor (router), el modelo pidió a una persona (herramienta pasar_a_persona) o el texto que salió promete
+  // que una persona responderá (red de seguridad): se avisa al equipo y se pausa.
+  await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas, resp.texto));
 }
 
 type Resp = Awaited<ReturnType<typeof llamarLLMConReintento>>;
