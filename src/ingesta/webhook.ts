@@ -33,11 +33,14 @@ function leerSecreto(encabezado: string | string[] | undefined, query: unknown):
 
 async function despachar(a: Aviso & { accountId: number }): Promise<void> {
   const cfg = await cargarClientePorChatwootAccount(a.accountId);
-  // Kill-switch: cliente desconocido, inactivo o con el bot apagado → se ignora.
-  if (!cfg || !cfg.activo || !cfg.botActivo) return;
+  // Cliente desconocido o dado de baja (activo = false) → se ignora todo.
+  if (!cfg || !cfg.activo) return;
   if (a.evento === 'message_updated') return procesarActualizacion(cfg, a); // ¿Meta rechazó un mensaje?
-  if (a.direccion === 'entrante') await procesarEntrante(cfg, a);
-  else if (a.direccion === 'saliente') await procesarSaliente(cfg, a);
+  // Las respuestas del equipo se registran SIEMPRE (pausan el bot), aunque el bot esté apagado:
+  // así, al volver a prenderlo, no le contesta encima a una persona que estaba atendiendo.
+  if (a.direccion === 'saliente') return procesarSaliente(cfg, a);
+  // Kill-switch (bot_activo = false): el bot no atiende al huésped.
+  if (a.direccion === 'entrante' && cfg.botActivo) await procesarEntrante(cfg, a);
 }
 
 export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<void> {
