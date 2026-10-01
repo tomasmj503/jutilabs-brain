@@ -93,3 +93,37 @@ describe('atenderTurno: red de seguridad para la promesa sin aviso', () => {
     expect(avisarEquipoYPausarMock).not.toHaveBeenCalled();
   });
 });
+
+describe('atenderTurno: la red de seguridad deja huella en el log (para medirla en el piloto)', () => {
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  const lineasDeRed = () => logSpy.mock.calls.map((c: unknown[]) => String(c[0])).filter((l: string) => l.startsWith('RED DE SEGURIDAD'));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    obtenerContextoMock.mockResolvedValue(convCon());
+    ruteoMock.mockResolvedValue({ tipo: 'responder' });
+  });
+
+  it('promesa sin herramienta: queda UNA línea RED DE SEGURIDAD con la conversación y el texto', async () => {
+    llamarLLMMock.mockResolvedValue(respuestaDelModelo('Los descuentos los maneja el equipo, así que paso tu consulta 🙏'));
+    await atenderTurno(cfg, turnoCon('¿hacen descuento por un mes?'));
+    const lineas = lineasDeRed();
+    expect(lineas).toHaveLength(1);
+    expect(lineas[0]).toContain('conv=1');
+    expect(lineas[0]).toContain('paso tu consulta');
+  });
+
+  it('si el modelo SÍ llamó a pasar_a_persona: la red no actuó, no deja línea', async () => {
+    llamarLLMMock.mockResolvedValue(respuestaDelModelo('Paso tu consulta al equipo 🙏', ['consultar_faq', 'pasar_a_persona']));
+    await atenderTurno(cfg, turnoCon('quiero un reembolso'));
+    expect(avisarEquipoYPausarMock).toHaveBeenCalledTimes(1);
+    expect(lineasDeRed()).toHaveLength(0);
+  });
+
+  it('respuesta normal y oferta: no avisa y no deja línea', async () => {
+    llamarLLMMock.mockResolvedValue(respuestaDelModelo('¿Te gustaría que el equipo te confirme la tarifa? Quedo atenta para pasar tu consulta 🙏'));
+    await atenderTurno(cfg, turnoCon('¿hay tarifa para huéspedes?'));
+    expect(avisarEquipoYPausarMock).not.toHaveBeenCalled();
+    expect(lineasDeRed()).toHaveLength(0);
+  });
+});

@@ -51,5 +51,17 @@ export function motivoParaAvisarAlEquipo(
 ): MotivoEscalamiento | null {
   if (temaAltoValor) return temaAltoValor;
   if (herramientasUsadas.includes(HERRAMIENTA_PASAR_A_PERSONA)) return 'fuera_de_alcance';
-  return textoEnviado && promesaDePasarConsulta(textoEnviado) ? 'fuera_de_alcance' : null;
+  return avisoPorRedDeSeguridad(temaAltoValor, herramientasUsadas, textoEnviado) ? 'fuera_de_alcance' : null;
+}
+
+/**
+ * ¿El aviso al equipo lo provoca SOLO la red de seguridad? Ni el router (tema de alto valor) ni el modelo
+ * (herramienta pasar_a_persona) pidieron a una persona, pero el texto que salió al huésped lo promete.
+ * Es la única regla de la red: motivoParaAvisarAlEquipo y el log del piloto usan esta misma función.
+ */
+export function avisoPorRedDeSeguridad(
+  temaAltoValor: MotivoEscalamiento | null, herramientasUsadas: readonly string[], textoEnviado?: string,
+): boolean {
+  if (temaAltoValor || herramientasUsadas.includes(HERRAMIENTA_PASAR_A_PERSONA)) return false;
+  return !!textoEnviado && promesaDePasarConsulta(textoEnviado);
 }

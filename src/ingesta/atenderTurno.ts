@@ -4,7 +4,7 @@ import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
 import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
-import { motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
+import { avisoPorRedDeSeguridad, motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
 import { EnvioIncierto } from '../salida/errores.js';
 import { herramientas } from '../llm/herramientas/index.js';
 import { rutear } from '../router/index.js';
@@ -148,6 +148,10 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   });
   // Tema de alto valor (router), el modelo pidió a una persona (herramienta pasar_a_persona) o el texto que salió promete
   // que una persona responderá (red de seguridad): se avisa al equipo y se pausa.
+  // Huella para el piloto: así se mide cuántas veces actúa la red y se repasan las falsas alarmas.
+  if (avisoPorRedDeSeguridad(temaAltoValor, resp.herramientasUsadas, resp.texto)) {
+    console.log(`RED DE SEGURIDAD conv=${conv.chatwootConversationId} promesa="${resp.texto.replace(/\s+/g, ' ').slice(0, 200)}"`);
+  }
   await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas, resp.texto));
 }
 
