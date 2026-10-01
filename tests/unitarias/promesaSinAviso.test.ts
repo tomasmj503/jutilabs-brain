@@ -109,3 +109,39 @@ describe('promesaDePasarConsulta: preguntas con "¿" son ofertas (F08 de la corr
     expect(promesaDePasarConsulta('Paso tu consulta al equipo, ¿te parece?')).toBe(true);
   });
 });
+
+describe('promesaDePasarConsulta en alemán: promesas que SÍ deben avisar al equipo', () => {
+  const promesasDe = [
+    'Ich gebe deine Anfrage an das Team weiter.',
+    'Ich leite Ihre Anfrage an unser Team weiter 🙏',
+    'Das Team meldet sich bei dir.',
+    'Jemand aus dem Team meldet sich in Kürze bei euch.',
+    'Das Team wird sich bei Ihnen melden.',
+    'Das Team bestätigt dir den Preis.',
+    'Anschließend meldet sich das Team bei dir.',
+    'Ein Teammitglied schreibt dir heute noch.',
+  ];
+  it.each(promesasDe)('detecta: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(true);
+  });
+});
+
+describe('promesaDePasarConsulta en alemán: frases normales, ofertas y condicionales que NO deben avisar', () => {
+  const normalesDe = [
+    'Das Team empfängt euch an der Rezeption und zeigt euch das Zimmer.',
+    'Die Rezeption ist rund um die Uhr besetzt.',
+    'Beim Check-in hilft euch das Team gern weiter.',
+    'Das Team kann dir den Preis bestätigen.',
+    // Pregunta = oferta, como el "¿" en español
+    'Möchtest du, dass das Team dir den Preis bestätigt?',
+    // Condicional: depende de que el huésped conteste primero
+    'Wenn du mir deine Reisedaten sagst, meldet sich das Team mit dem Preis.',
+    // Imperativo dirigido al huésped, no una promesa
+    'Kontaktiert das Team einfach per WhatsApp.',
+    // Respuestas reales de E05 (DeepSeek, 1-oct)
+    'Die Verfügbarkeit und Preise seht ihr direkt hier. Wenn ihr mir eure Reisedaten sagt, helfe ich euch gern weiter 🌿',
+  ];
+  it.each(normalesDe)('no dispara: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+});

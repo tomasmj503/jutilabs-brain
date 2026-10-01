@@ -30,12 +30,29 @@ const PROMESAS: readonly RegExp[] = [
   /\b(team|someone|somebody|staff)\b[^.!?\n]{0,40}\b(will|is going to|'ll)\s+(get back|reach out|contact|be in touch|follow up|write|respond|message)\b/,
 ];
 
+const SUJETO_DE = 'team|teammitglied|jemand|kollege|kollegin|mitarbeiter|mitarbeiterin';
+
+/** Promesas en alemán (el texto ya viene normalizado: sin tildes, "ü" = "u"). Solo promesas, nunca ofertas ni condicionales. */
+const PROMESAS_DE: readonly RegExp[] = [
+  // "Ich gebe deine Anfrage an das Team weiter", "Ich leite Ihre Anfrage an unser Team weiter"
+  /\bich\s+(gebe|leite)\s+(deine|ihre|eure|diese|die)\s+(anfrage|frage|nachricht|bitte|anliegen)\b[^.!?\n]{0,40}\bweiter\b/,
+  // "Das Team meldet sich bei dir", "Jemand aus dem Team meldet sich", "Das Team wird sich bei Ihnen melden"
+  new RegExp(`\\b(${SUJETO_DE})\\b[^.!?\\n]{0,30}\\b(meldet\\s+sich|(wird|werden)\\s+sich\\b[^.!?\\n]{0,25}\\bmelden)\\b`),
+  // Orden invertido: "Anschließend meldet sich das Team bei dir"
+  new RegExp(`\\bmeldet\\s+sich\\s+((das|unser|unsere|ein|eine)\\s+)?(${SUJETO_DE})\\b`),
+  // "Das Team bestätigt dir den Preis", "Ein Teammitglied schreibt dir heute noch"
+  new RegExp(`\\b(${SUJETO_DE})\\b[^.!?\\n]{0,25}\\b(bestatigt|schreibt|antwortet|kontaktiert|ruft)\\s+(dir|dich|euch|ihnen|sie)\\b`),
+];
+const CONDICION_DE = /\b(wenn|falls|sofern|sobald)\s/;
+
 /** ¿El texto que salió al huésped promete que una persona va a responderle? */
 export function promesaDePasarConsulta(texto: string): boolean {
   // Oración por oración. Si antes de la promesa hay un "si ..." / "if ...", depende de que el huésped conteste primero
   // ("Si me compartes tus fechas, el equipo te confirma el valor"): no se avisa todavía. Una pregunta ("¿Quieres que pase tu caso al equipo?") es una oferta: tampoco. "Sí, paso tu consulta" (con coma) sí cuenta.
   return normalizar(texto).split(/(?<=[.!?])\s+|\n+/).some((oracion) =>
-    PROMESAS.some((p) => [...oracion.matchAll(new RegExp(p.source, 'g'))].some((m) => !/\b(si|if)\s|¿/.test(oracion.slice(0, m.index)))));
+    PROMESAS.some((p) => [...oracion.matchAll(new RegExp(p.source, 'g'))].some((m) => !/\b(si|if)\s|¿/.test(oracion.slice(0, m.index)))) ||
+    // Alemán: la pregunta termina en "?" (no hay "¿" al inicio) y la condición es "wenn/falls...".
+    (!oracion.trimEnd().endsWith('?') && PROMESAS_DE.some((p) => [...oracion.matchAll(new RegExp(p.source, 'g'))].some((m) => !CONDICION_DE.test(oracion.slice(0, m.index))))));
 }
 
 /**
