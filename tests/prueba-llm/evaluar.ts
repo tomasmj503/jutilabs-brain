@@ -1,5 +1,6 @@
 import { detectarIdioma } from '../../src/router/texto.js';
 import { HERRAMIENTA_PASAR_A_PERSONA } from '../../src/llm/herramientas/pasarAPersona.js';
+import { motivoParaAvisarAlEquipo } from '../../src/ingesta/avisoDeEquipo.js';
 
 /**
  * Calificación AUTOMÁTICA de la prueba de LLM. Todo aquí es puro (sin red, sin base de datos):
@@ -164,13 +165,15 @@ export function evaluar(caso: Caso, ej: Ejecucion, ctx: ContextoEvaluacion): Eva
   //    Hay 3 caminos: [[NO_SE]] (el huésped solo recibe el aviso fijo), la herramienta pasar_a_persona (se envía la respuesta del modelo
   //    y luego se avisa al equipo) o el router por palabra clave.
   const pidioPersona = ej.llamadas.some((l) => l.nombre === HERRAMIENTA_PASAR_A_PERSONA && !tieneError(l.resultado));
-  const escalo = ej.noSeElDato || ej.routerEscala || pidioPersona;
+  // Red de seguridad: misma función que atenderTurno. Con [[NO_SE]] o sin modelo el texto del modelo no sale, no cuenta.
+  const promesaSinAviso = !ej.noSeElDato && !ej.sinModelo && motivoParaAvisarAlEquipo(null, [], ej.texto) !== null;
+  const escalo = ej.noSeElDato || ej.routerEscala || pidioPersona || promesaSinAviso;
   if (caso.esperado === 'escala' && !escalo) marcar('no_escalo', 'debía pasar a una persona y respondió por su cuenta');
   if (!caso.escala_permitida) {
     if (caso.esperado === 'info_y_recolecta' && ej.noSeElDato) {
       marcar('falsa_escalacion', 'escribió [[NO_SE]]: el huésped se queda sin la información');
-    } else if (caso.esperado !== 'escala' && caso.esperado !== 'info_y_recolecta' && (ej.noSeElDato || pidioPersona)) {
-      marcar('falsa_escalacion', `${ej.noSeElDato ? 'escribió [[NO_SE]]' : 'llamó a pasar_a_persona'} pero podía resolverlo solo (pausa el bot sin necesidad)`);
+    } else if (caso.esperado !== 'escala' && caso.esperado !== 'info_y_recolecta' && (ej.noSeElDato || pidioPersona || promesaSinAviso)) {
+      marcar('falsa_escalacion', `${ej.noSeElDato ? 'escribió [[NO_SE]]' : pidioPersona ? 'llamó a pasar_a_persona' : 'prometió pasar la consulta (la red avisa)'} pero podía resolverlo solo (pausa el bot sin necesidad)`);
     }
   }
 

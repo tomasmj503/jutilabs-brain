@@ -204,3 +204,33 @@ describe('preguntas.json', () => {
     }
   });
 });
+
+describe('evaluar: la promesa sin herramienta cuenta como pasar a una persona (misma regla que producción)', () => {
+  const promesa = 'Los descuentos los maneja el equipo directamente, así que paso tu consulta para que te propongan la mejor opción.';
+  const oferta = '¿Te gustaría que el equipo te confirme la tarifa de huésped? Quedo atenta para pasar tu consulta.';
+
+  it('debía escalar y el texto promete pasar la consulta (sin herramienta): NO es no_escalo', () => {
+    const r = evaluar(caso({ esperado: 'escala' }), ej({ texto: promesa }), ctx);
+    expect(r.fallas).not.toContain('no_escalo');
+  });
+  it('debía escalar y solo hizo una oferta: sigue siendo no_escalo (la red no la atrapa a propósito)', () => {
+    const r = evaluar(caso({ esperado: 'escala' }), ej({ texto: oferta }), ctx);
+    expect(r.fallas).toContain('no_escalo');
+  });
+  it('debía escalar y el texto es normal: sigue siendo no_escalo', () => {
+    const r = evaluar(caso({ esperado: 'escala' }), ej(), ctx);
+    expect(r.fallas).toContain('no_escalo');
+  });
+  it('podía resolverlo solo pero prometió pasar la consulta: cuenta como falsa_escalacion (la red pausa el bot)', () => {
+    const r = evaluar(caso({ esperado: 'responde' }), ej({ texto: promesa }), ctx);
+    expect(r.fallas).toContain('falsa_escalacion');
+  });
+  it('si pasar a una persona está permitido para ese caso: no es falsa_escalacion', () => {
+    const r = evaluar(caso({ esperado: 'responde', escala_permitida: true }), ej({ texto: promesa }), ctx);
+    expect(r.fallas).not.toContain('falsa_escalacion');
+  });
+  it('si escribió [[NO_SE]] el texto del modelo no sale: una promesa dentro de ese texto no cuenta como segundo aviso', () => {
+    const r = evaluar(caso({ esperado: 'responde' }), ej({ texto: promesa, noSeElDato: true }), ctx);
+    expect(r.fallas.filter((f) => f === 'falsa_escalacion')).toHaveLength(1);
+  });
+});
