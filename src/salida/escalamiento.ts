@@ -1,3 +1,4 @@
+import { causaDelEscalamiento } from './causaEscalamiento.js';
 import type { ClienteConfig, MotivoEscalamiento } from '../types/index.js';
 import { enviarMensaje, enviarNotaPrivada, marcarAbierta } from './chatwoot.js';
 import { pausarBot } from '../conversacion/estado.js';
@@ -48,9 +49,7 @@ export async function responderYEscalar(
     envio = e instanceof EnvioIncierto ? 'incierto' : 'fallo';
     console.error(`ESCALAMIENTO: EL AVISO AL HUÉSPED NO SALIÓ (${envio}) conv=${conversationId}:`, e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
   }
-  const causa = motivo === 'error_interno' ? 'falla técnica del bot (no fue falta de dato)'
-    : motivo === 'pidio_humano' ? 'el huésped pidió hablar con una persona'
-    : 'no tenía el dato para responder';
+  const causa = causaDelEscalamiento(motivo);
   const aviso = envio === 'enviado' ? '' : AVISO_EQUIPO[envio];
   const nota = `🤖 Escalado por el bot: ${causa}.${aviso}\nPregunta del huésped: "${pregunta.slice(0, 300)}"`;
   await conUnReintento('nota', conversationId, () => enviarNotaPrivada(cfg, conversationId, nota));

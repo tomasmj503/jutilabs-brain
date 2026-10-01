@@ -10,6 +10,7 @@ import { herramientas } from '../llm/herramientas/index.js';
 import { rutear } from '../router/index.js';
 import { detectarIdioma, esSoloSaludo } from '../router/texto.js';
 import { aplicarReactivacion, estaPausado, guardarIdioma } from '../conversacion/estado.js';
+import { llegoAlTope } from '../conversacion/topeDiario.js';
 import { esRepeticion } from './repeticion.js';
 import { textoFijo } from './textosFijos.js';
 import { debeAcusar } from './acuse.js';
@@ -101,6 +102,12 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
   }
   if (decision.tipo === 'escalar' && decision.motivo === 'pidio_humano') {
     await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'pidio_humano');
+    return null;
+  }
+  // Tope diario de mensajes del bot en esta conversación: no se gasta modelo, pasa al equipo y se pausa.
+  if (await llegoAlTope(cfg, conv.id)) {
+    console.log(`TOPE DIARIO conv=${conv.chatwootConversationId} limite=${cfg.limiteMensajesDiaConversacion}`);
+    await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'limite_mensajes');
     return null;
   }
   const temaAltoValor = decision.tipo === 'escalar' ? decision.motivo : null;

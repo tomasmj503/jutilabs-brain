@@ -28,6 +28,7 @@ vi.mock('../../src/ingesta/textosFijos.js', async (orig) => ({
 }));
 vi.mock('../../src/config/env.js', () => ({ env: {}, secretoPorRef: () => 'x' }));
 vi.mock('../../src/db/supabase.js', () => ({ supabase: {} }));
+vi.mock('../../src/conversacion/topeDiario.js', () => ({ llegoAlTope: async () => false }));
 
 const { atenderTurno } = await import('../../src/ingesta/atenderTurno.js');
 
