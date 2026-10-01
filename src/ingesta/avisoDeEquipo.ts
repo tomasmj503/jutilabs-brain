@@ -15,8 +15,8 @@ const VERBOS_ES = 'confirma|confirmara|confirmaran|escribe|escribira|escribiran|
  * Cada frase nueva se agrega con su prueba en tests/unitarias/promesaSinAviso.test.ts.
  */
 const PROMESAS: readonly RegExp[] = [
-  // "paso tu consulta", "le paso tu consulta", "ya pasé tu solicitud", "voy a pasar tu consulta"
-  /\b(paso|pase|pasare|pasaremos|voy a pasar|vamos a pasar)\s+(tu|su)\s+(consulta|solicitud|pregunta|mensaje|caso|duda|pedido)\b/,
+  // "paso tu consulta", "le paso tu consulta", "ya pasé tu solicitud", "voy a pasar tu consulta", "dejo tu consulta con el equipo"
+  /\b(paso|pase|pasare|pasaremos|voy a pasar|vamos a pasar|dejo|deje|dejare|voy a dejar)\s+(tu|su)\s+(consulta|solicitud|pregunta|mensaje|caso|duda|pedido)\b/,
   // "el equipo te confirma", "una persona del equipo te escribe", "alguien te contactará"
   new RegExp(`\\b(equipo|persona|alguien|asesor|asesora|recepcion)\\b[^.!?\\n]{0,25}\\b(te|le|les)\\s+(${VERBOS_ES})\\b`),
   // "te van a escribir"
@@ -33,9 +33,9 @@ const PROMESAS: readonly RegExp[] = [
 /** ¿El texto que salió al huésped promete que una persona va a responderle? */
 export function promesaDePasarConsulta(texto: string): boolean {
   // Oración por oración. Si antes de la promesa hay un "si ..." / "if ...", depende de que el huésped conteste primero
-  // ("Si me compartes tus fechas, el equipo te confirma el valor"): no se avisa todavía. "Sí, paso tu consulta" (con coma) sí cuenta.
+  // ("Si me compartes tus fechas, el equipo te confirma el valor"): no se avisa todavía. Una pregunta ("¿Quieres que pase tu caso al equipo?") es una oferta: tampoco. "Sí, paso tu consulta" (con coma) sí cuenta.
   return normalizar(texto).split(/(?<=[.!?])\s+|\n+/).some((oracion) =>
-    PROMESAS.some((p) => [...oracion.matchAll(new RegExp(p.source, 'g'))].some((m) => !/\b(si|if)\s/.test(oracion.slice(0, m.index)))));
+    PROMESAS.some((p) => [...oracion.matchAll(new RegExp(p.source, 'g'))].some((m) => !/\b(si|if)\s|¿/.test(oracion.slice(0, m.index)))));
 }
 
 /**

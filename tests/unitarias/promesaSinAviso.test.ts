@@ -81,3 +81,31 @@ describe('promesaDePasarConsulta: condicionales vs. promesas reales (respuestas 
     expect(promesaDePasarConsulta(t)).toBe(false);
   });
 });
+
+describe('promesaDePasarConsulta: "dejo tu consulta con el equipo" (F05 de la corrida del 1-oct)', () => {
+  it.each([
+    'Para confirmar tu reserva #48213, lo mejor es escribir directamente al equipo por WhatsApp. Dejo tu consulta con una persona del equipo para que te ayude. ✨',
+    'Ya dejé tu consulta con el equipo 🙏',
+  ])('detecta: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(true);
+  });
+  it.each([
+    'Si quieres, dejo tu consulta con el equipo.',
+    'Te dejo el enlace de reserva con tus fechas.',
+    'Puedes dejar tu consulta por escrito aquí.',
+  ])('no dispara: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+});
+
+describe('promesaDePasarConsulta: preguntas con "¿" son ofertas (F08 de la corrida del 1-oct)', () => {
+  it.each([
+    '¿Quieres que pase tu caso al equipo para comentarlo con el profe?',
+    '¿Quieres que le paso tu consulta al equipo?',
+  ])('no dispara: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+  it('sí dispara si la pregunta va después de la promesa', () => {
+    expect(promesaDePasarConsulta('Paso tu consulta al equipo, ¿te parece?')).toBe(true);
+  });
+});
