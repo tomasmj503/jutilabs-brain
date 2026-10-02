@@ -80,6 +80,8 @@ const textoDeError = (e: unknown): string => `${e instanceof Error ? e.message :
 /** Esperas entre reintentos cuando el proveedor limita la velocidad (429). Se cuentan por modelo y se muestran en el resumen. */
 const ESPERAS_429_MS = [4_000, 12_000, 30_000];
 const reintentos429 = new Map<string, number>();
+/** Cortes de conexión que el reintento de llamarLLM absorbió (línea "LLM REINTENTO CONEXION" del log). Se cuentan por modelo. */
+const reintentosConexion = new Map<string, number>();
 
 // Import dinámico: recién aquí se lee y valida el entorno (ya con el relleno puesto).
 const { cargarClientePorChatwootAccount } = await import('../../src/config/cliente.js');
@@ -318,13 +320,14 @@ async function recalificar(carpeta: string | undefined): Promise<void> {
   }
   const dir = carpeta.endsWith('/') ? carpeta : `${carpeta}/`;
   const previo = JSON.parse(await readFile(`${dir}resumen.json`, 'utf8')) as {
-    marca: string; hoy: string; modos: Record<string, Modo>; reintentos429?: Record<string, number>;
+    marca: string; hoy: string; modos: Record<string, Modo>; reintentos429?: Record<string, number>; reintentosConexion?: Record<string, number>;
   };
   const set = JSON.parse(await readFile(fileURLToPath(new URL('./preguntas.json', import.meta.url)), 'utf8')) as PreguntasJson;
   const porId = new Map(set.casos.map((c) => [c.id, c]));
   const base = new Set<number>([...set.montos_fijos_permitidos, ...(await preciosActivos())]);
   const modelos = Object.keys(previo.modos);
   for (const [m, n] of Object.entries(previo.reintentos429 ?? {})) reintentos429.set(m, n);
+  for (const [m, n] of Object.entries(previo.reintentosConexion ?? {})) reintentosConexion.set(m, n);
 
   const resumenes: Record<string, ReturnType<typeof resumir>> = {};
   const porProveedor: Record<string, LatenciaProveedor[]> = {};
@@ -394,7 +397,8 @@ async function correrPrueba(): Promise<void> {
     const silencio = (): void => undefined;
     let hechas = 0;
     console.log(`▶ ${modelo} (razonamiento ${modo})`);
-    console.log = silencio; console.error = silencio; // llamarLLM imprime cada herramienta; aquí estorba
+    console.log = silencio; // llamarLLM imprime cada herramienta; aquí estorba
+    console.error = (...a: unknown[]): void => { if (String(a[0]).startsWith('LLM REINTENTO CONEXION')) reintentosConexion.set(modelo, (reintentosConexion.get(modelo) ?? 0) + 1); };
     let brutas: Awaited<ReturnType<(typeof tareas)[number]>>[];
     try {
       brutas = await conLimite(tareas, concurrencia, (n) => { hechas = n; if (n % 20 === 0) original.log(`  ${n}/${tareas.length}`); });
@@ -423,7 +427,7 @@ async function correrPrueba(): Promise<void> {
     fallas[modelo] = detalle.fallas;
   }
 
-  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, extra: extraManual, modos, reintentos429: Object.fromEntries(reintentos429), criterios: CRITERIOS, resumenes, porProveedor, precios: PRECIOS }, null, 2));
+  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, extra: extraManual, modos, reintentos429: Object.fromEntries(reintentos429), reintentosConexion: Object.fromEntries(reintentosConexion), criterios: CRITERIOS, resumenes, porProveedor, precios: PRECIOS }, null, 2));
   await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores, modos, fallas, porProveedor));
   console.log(`\nListo. Resultados en ${dir}`);
   console.log(await readFile(`${dir}resumen.md`, 'utf8'));
@@ -460,7 +464,7 @@ function resumenEnMarkdown(
     if (x) L.push(`| ${m} | ${cats.map((c) => `${x.porCategoria[c]?.aprobadasPct ?? '—'}%`).join(' | ')} |`);
   }
   L.push('\n## Razonamiento usado y límites de velocidad\n');
-  for (const m of modelos) L.push(`- ${m}: razonamiento **${modos[m] ?? '—'}**${modos[m] === 'normal' && values.razonamiento === 'auto' ? ' (el proveedor no deja apagarlo)' : ''}; reintentos por límite de velocidad (429): ${reintentos429.get(m) ?? 0}`);
+  for (const m of modelos) L.push(`- ${m}: razonamiento **${modos[m] ?? '—'}**${modos[m] === 'normal' && values.razonamiento === 'auto' ? ' (el proveedor no deja apagarlo)' : ''}; reintentos por límite de velocidad (429): ${reintentos429.get(m) ?? 0}; cortes de conexión absorbidos por el reintento: ${reintentosConexion.get(m) ?? 0}`);
   L.push('\n## Latencia por proveedor (quién respondió; "A + B" = la consulta pasó por varios)\n');
   for (const m of modelos) {
     L.push(`**${m}**`);

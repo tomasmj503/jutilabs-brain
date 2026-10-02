@@ -35,6 +35,12 @@ Opciones: `--modelos a,b` · `--rep 3` · `--cuenta 1` (cuenta de Mandala en Cha
 
 **Límite de velocidad (429).** El corredor reintenta hasta 3 veces (4, 12 y 30 s) y cuenta cuántos reintentos hizo cada modelo; si igual no responde, cuenta como error de la API.
 
+**Cortes de conexión.** `llamarLLM` repite UNA vez, con el mismo modelo, una llamada que se corta por la red (sin código HTTP; el tiempo agotado de 25 s no cuenta) y deja la línea `LLM REINTENTO CONEXION` en el log. El resumen cuenta cuántos absorbió ("cortes de conexión absorbidos por el reintento"). Un corte que sobrevive al reintento cuenta como error de la API.
+
+## Pendiente para el despliegue
+- El modelo de respaldo de Mandala hoy es `deepseek/deepseek-v3.2` (clientes.llm_modelo_respaldo, leído de Supabase el 2-oct-2026). **No se probó en esta prueba de LLM** (aquí el respaldo se apaga a propósito). Antes de depender de él, o al desplegar, probarlo con `--modelos deepseek/deepseek-v3.2`, o cambiarlo por un modelo ya probado.
+- La fila de Mandala en Supabase (`clientes.config_extra.llmExtra`) se cambia al desplegar, con confirmación: `{"reasoning":{"enabled":false},"provider":{"order":["Together","DeepInfra"],"allow_fallbacks":true,"data_collection":"deny"}}`.
+
 ## Archivos
 - `preguntas.json` — los casos, con qué debe pasar en cada uno y verificaciones automáticas.
 - `evaluar.ts` — calificación automática (pura; con tests en `tests/unitarias/pruebaLlmEvaluar.test.ts`).
