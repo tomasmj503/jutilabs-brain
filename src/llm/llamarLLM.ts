@@ -1,10 +1,13 @@
 import OpenAI from 'openai';
 import type { ClienteConfig, ContextoConversacion, HerramientaLLM, RespuestaLLM } from '../types/index.js';
 import { env, secretoPorRef } from '../config/env.js';
+import { parametrosExtra } from './parametrosExtra.js';
+import { causaDelCorte, esCorteDeConexion } from './corteDeConexion.js';
 
 const MARCA_NO_SE = '[[NO_SE]]';
 const MAX_RONDAS_HERRAMIENTAS = 3;
 const TIMEOUT_MS = 25000;
+const PAUSA_REINTENTO_CONEXION_MS = 500;
 
 type Mensaje = { rol: 'system' | 'user' | 'assistant'; contenido: string };
 type MensajeAPI = OpenAI.Chat.ChatCompletionMessageParam;
@@ -14,6 +17,25 @@ function esErrorReintentable(e: unknown): boolean {
   const status = (e as { status?: number })?.status;
   if (status === undefined) return true;
   return status >= 500 || status === 429;
+}
+
+/**
+ * Una llamada al modelo. Si la conexión se corta (sin código HTTP, no tiempo agotado) se repite UNA vez con el mismo modelo
+ * antes de pasar al respaldo: es solo la llamada, no el turno (las herramientas ya consultadas no se repiten).
+ * Deja una línea en el log para medir cuántas veces pasa en el piloto.
+ */
+async function crearConReintento(
+  cliente: OpenAI, cuerpo: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, modelo: string, ronda: number,
+): Promise<OpenAI.Chat.ChatCompletion> {
+  const inicio = Date.now();
+  try {
+    return await cliente.chat.completions.create(cuerpo);
+  } catch (e) {
+    if (!esCorteDeConexion(e)) throw e;
+    console.error(`LLM REINTENTO CONEXION modelo=${modelo} ronda=${ronda} tras=${Date.now() - inicio}ms causa=${causaDelCorte(e)}`);
+    await new Promise((r) => setTimeout(r, PAUSA_REINTENTO_CONEXION_MS));
+    return await cliente.chat.completions.create(cuerpo);
+  }
 }
 
 async function conversar(
@@ -32,26 +54,37 @@ async function conversar(
 
   const inicio = Date.now();
   const msgs: MensajeAPI[] = mensajes.map((m) => ({ role: m.rol, content: m.contenido }));
-  const tools = herramientas.map((h) => ({
+  const aTools = (hs: HerramientaLLM[]) => hs.map((h) => ({
     type: 'function' as const,
     function: { name: h.nombre, description: h.descripcion, parameters: h.parametros },
   }));
+  const toolsTodas = aTools(herramientas);
+  // En la ronda obligatoria solo van las de consulta: las de acción (pasar_a_persona) se ofrecen después de consultar.
+  const toolsPrimeraRonda = aTools(herramientas.filter((h) => !h.soloTrasConsultar));
   const usadas: string[] = [];
   let tokensEntrada = 0;
   let tokensSalida = 0;
+  const proveedores: string[] = [];
 
   for (let ronda = 0; ronda <= MAX_RONDAS_HERRAMIENTAS; ronda++) {
+    const rondaForzada = forzarHerramienta && ronda === 0;
+    const tools = rondaForzada && toolsPrimeraRonda.length > 0 ? toolsPrimeraRonda : toolsTodas;
     const puedeUsarHerramientas = tools.length > 0 && ronda < MAX_RONDAS_HERRAMIENTAS;
 
-    const r = await cliente.chat.completions.create({
+    const cuerpo = {
+      // Parámetros extra del cliente (ej. reasoning). Van primero: nada de lo de abajo se puede pisar.
+      ...parametrosExtra(ctx.cfg),
       model: modelo,
       messages: msgs,
       temperature: ctx.cfg.llmTemperatura,
       max_tokens: 500,
       // Primera ronda: el modelo DEBE consultar una herramienta (no puede responder de memoria).
-      ...(puedeUsarHerramientas ? { tools, tool_choice: forzarHerramienta && ronda === 0 ? ('required' as const) : ('auto' as const) } : {}),
-    });
+      ...(puedeUsarHerramientas ? { tools, tool_choice: rondaForzada ? ('required' as const) : ('auto' as const) } : {}),
+    };
+    const r = await crearConReintento(cliente, cuerpo as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, modelo, ronda);
 
+    // OpenRouter agrega "provider" a la respuesta (no está en el tipo de OpenAI).
+    proveedores.push((r as { provider?: string }).provider || 'desconocido');
     tokensEntrada += r.usage?.prompt_tokens ?? 0;
     tokensSalida += r.usage?.completion_tokens ?? 0;
 
@@ -72,6 +105,7 @@ async function conversar(
         tokensSalida,
         latenciaMs: Date.now() - inicio,
         herramientasUsadas: usadas,
+        proveedores,
         noSeElDato,
       };
     }

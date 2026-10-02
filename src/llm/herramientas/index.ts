@@ -4,6 +4,7 @@ import { consultarClases } from './consultarClases.js';
 import { consultarEventos } from './consultarEventos.js';
 import { consultarHabitaciones } from './consultarHabitaciones.js';
 import { generarLinkReserva } from './generarLinkReserva.js';
+import { pasarAPersona } from './pasarAPersona.js';
 
 /** Nombres genéricos a propósito (principio de reutilización, §10). */
 export const herramientas: HerramientaLLM[] = [
@@ -12,4 +13,5 @@ export const herramientas: HerramientaLLM[] = [
   consultarEventos,
   consultarHabitaciones,
   generarLinkReserva,
+  pasarAPersona,
 ];

@@ -3,12 +3,15 @@ import { guardarMensaje, obtenerContexto, type MensajeAGuardar } from '../conver
 import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
+import { avisarAlCelular } from '../salida/avisoEquipo.js';
 import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
+import { avisoPorRedDeSeguridad, motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
 import { EnvioIncierto } from '../salida/errores.js';
 import { herramientas } from '../llm/herramientas/index.js';
 import { rutear } from '../router/index.js';
 import { detectarIdioma, esSoloSaludo } from '../router/texto.js';
 import { aplicarReactivacion, estaPausado, guardarIdioma } from '../conversacion/estado.js';
+import { llegoAlTope } from '../conversacion/topeDiario.js';
 import { esRepeticion } from './repeticion.js';
 import { textoFijo } from './textosFijos.js';
 import { debeAcusar } from './acuse.js';
@@ -102,6 +105,12 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'pidio_humano');
     return null;
   }
+  // Tope diario de mensajes del bot en esta conversación: no se gasta modelo, pasa al equipo y se pausa.
+  if (await llegoAlTope(cfg, conv.id)) {
+    console.log(`TOPE DIARIO conv=${conv.chatwootConversationId} limite=${cfg.limiteMensajesDiaConversacion}`);
+    await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'limite_mensajes');
+    return null;
+  }
   const temaAltoValor = decision.tipo === 'escalar' ? decision.motivo : null;
   return { conv, temaAltoValor };
 }
@@ -139,13 +148,19 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   if (esRepeticion(conv, resp.texto, texto)) {
     console.log(`REPETICIÓN EVITADA conv=${conv.chatwootConversationId}`);
     await enviarYGuardar(cfg, conv, textoFijo(cfg, 'mensajeNoEntendi', conv.idioma), { origen: 'no_entendi' });
-    return avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
+    return avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas));
   }
   await enviarYGuardar(cfg, conv, resp.texto, {
     origen: 'llm', modelo: resp.modelo, tokensEntrada: resp.tokensEntrada,
     tokensSalida: resp.tokensSalida, latenciaMs: resp.latenciaMs, herramientas: resp.herramientasUsadas,
   });
-  await avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
+  // Tema de alto valor (router), el modelo pidió a una persona (herramienta pasar_a_persona) o el texto que salió promete
+  // que una persona responderá (red de seguridad): se avisa al equipo y se pausa.
+  // Huella para el piloto: así se mide cuántas veces actúa la red y se repasan las falsas alarmas.
+  if (avisoPorRedDeSeguridad(temaAltoValor, resp.herramientasUsadas, resp.texto)) {
+    console.log(`RED DE SEGURIDAD conv=${conv.chatwootConversationId} promesa="${resp.texto.replace(/\s+/g, ' ').slice(0, 200)}"`);
+  }
+  await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas, resp.texto));
 }
 
 type Resp = Awaited<ReturnType<typeof llamarLLMConReintento>>;
@@ -190,6 +205,7 @@ async function atenderMedia(cfg: ClienteConfig, conv: ContextoConversacion, tipo
   const nota = `📎 El huésped envió ${descripcionMedia(tipos)} (sin texto). ${estado} Revisa la conversación por si hace falta responderle.`;
   await enviarNotaPrivada(cfg, conv.chatwootConversationId, nota)
     .catch(avisarFallo('NO SE PUDO DEJAR LA NOTA AL EQUIPO (media)'));
+  await avisarAlCelular(cfg, conv.chatwootConversationId, nota);
 }
 
 /** Bot pausado: avisa al huésped UNA vez por pausa. Si falla, solo se registra (nunca dispara otro escalamiento). */

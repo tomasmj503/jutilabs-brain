@@ -10,3 +10,6 @@ infra/.env.*
 *.log
 .DS_Store
 coverage/
+
+# Resultados de la prueba de LLM (salidas del modelo y datos del cliente; no se suben)
+tests/prueba-llm/resultados/

@@ -49,9 +49,28 @@ describe('webhook: message_updated', () => {
     expect(actualizacion).not.toHaveBeenCalled();
     expect(entrante).not.toHaveBeenCalled();
   });
-  it('respeta el interruptor: cliente con el bot apagado no procesa nada', async () => {
+  it('bot apagado: no atiende al huésped', async () => {
+    cargarCliente.mockResolvedValue({ id: 'c1', activo: true, botActivo: false });
+    await enviar(cuerpo({}));
+    expect(entrante).not.toHaveBeenCalled();
+  });
+  it('bot apagado: la respuesta del equipo igual pausa', async () => {
+    cargarCliente.mockResolvedValue({ id: 'c1', activo: true, botActivo: false });
+    await enviar(cuerpo({ message_type: 'outgoing' }));
+    expect(saliente).toHaveBeenCalledTimes(1);
+  });
+  it('bot apagado: el rechazo de Meta igual se revisa', async () => {
     cargarCliente.mockResolvedValue({ id: 'c1', activo: true, botActivo: false });
     await enviar(cuerpo({ event: 'message_updated', message_type: 'outgoing' }));
+    expect(actualizacion).toHaveBeenCalledTimes(1);
+  });
+  it('cliente inactivo: no procesa nada', async () => {
+    cargarCliente.mockResolvedValue({ id: 'c1', activo: false, botActivo: true });
+    await enviar(cuerpo({}));
+    await enviar(cuerpo({ message_type: 'outgoing' }));
+    await enviar(cuerpo({ event: 'message_updated', message_type: 'outgoing' }));
+    expect(entrante).not.toHaveBeenCalled();
+    expect(saliente).not.toHaveBeenCalled();
     expect(actualizacion).not.toHaveBeenCalled();
   });
   it('sin el secreto correcto responde 401 y no procesa', async () => {

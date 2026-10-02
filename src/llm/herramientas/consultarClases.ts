@@ -16,7 +16,7 @@ export const consultarClases: HerramientaLLM = {
         .select('nombre, dia_semana, hora, duracion_min, frecuencia, nivel, descripcion, respuesta_modelo')
         .eq('cliente_id', cid).eq('activo', true).order('dia_semana').order('hora'),
       supabase.from('productos')
-        .select('nombre, precio, moneda, unidad, notas')
+        .select('nombre, precio, moneda, unidad, notas, descripcion')
         .eq('cliente_id', cid).eq('activo', true).in('categoria', ['clase', 'paquete'])
         .or(`vigencia_hasta.is.null,vigencia_hasta.gte.${hoy}`).order('precio'),
     ]);

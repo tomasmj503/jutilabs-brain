@@ -1,8 +1,10 @@
+import { causaDelEscalamiento } from './causaEscalamiento.js';
 import type { ClienteConfig, MotivoEscalamiento } from '../types/index.js';
 import { enviarMensaje, enviarNotaPrivada, marcarAbierta } from './chatwoot.js';
 import { pausarBot } from '../conversacion/estado.js';
 import { textoFijo } from '../ingesta/textosFijos.js';
 import { EnvioIncierto } from './errores.js';
+import { avisarAlCelular } from './avisoEquipo.js';
 
 
 async function conUnReintento(paso: string, conversationId: number, f: () => Promise<void>): Promise<void> {
@@ -48,14 +50,13 @@ export async function responderYEscalar(
     envio = e instanceof EnvioIncierto ? 'incierto' : 'fallo';
     console.error(`ESCALAMIENTO: EL AVISO AL HUÉSPED NO SALIÓ (${envio}) conv=${conversationId}:`, e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
   }
-  const causa = motivo === 'error_interno' ? 'falla técnica del bot (no fue falta de dato)'
-    : motivo === 'pidio_humano' ? 'el huésped pidió hablar con una persona'
-    : 'no tenía el dato para responder';
+  const causa = causaDelEscalamiento(motivo);
   const aviso = envio === 'enviado' ? '' : AVISO_EQUIPO[envio];
   const nota = `🤖 Escalado por el bot: ${causa}.${aviso}\nPregunta del huésped: "${pregunta.slice(0, 300)}"`;
   await conUnReintento('nota', conversationId, () => enviarNotaPrivada(cfg, conversationId, nota));
   await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
   await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
+  await avisarAlCelular(cfg, conversationId, nota);
   return { texto, mensajeId, envio };
 }
 
@@ -68,6 +69,7 @@ export async function alertarEnvioIncierto(cfg: ClienteConfig, conversationId: n
   await conUnReintento('nota', conversationId, () => enviarNotaPrivada(cfg, conversationId, nota));
   await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
   await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, 'error_interno'));
+  await avisarAlCelular(cfg, conversationId, nota);
 }
 
 /**
@@ -85,6 +87,7 @@ export async function avisarEquipoYPausar(
   await conUnReintento('nota', conversationId, () => enviarNotaPrivada(cfg, conversationId, nota));
   await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
   await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
+  await avisarAlCelular(cfg, conversationId, nota);
 }
 
 /**
@@ -100,4 +103,5 @@ export async function avisarMensajeFallido(
   const nota = `⚠️ Un mensaje NO llegó al huésped: WhatsApp (Meta) lo rechazó después de aceptarlo.\nMotivo que informa Meta: ${motivo}\nMensaje: "${fallo.contenido.slice(0, 300)}"\nQué hacer: revisa la conversación y, si hace falta, contacta al huésped por otro medio. Ojo: el botón "Reintentar" de Chatwoot puede marcarlo como enviado sin reenviarlo; si lo usas, confirma que sí llegó.`;
   await enviarNotaPrivada(cfg, conversationId, nota);
   await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
+  await avisarAlCelular(cfg, conversationId, nota);
 }

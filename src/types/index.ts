@@ -146,6 +146,11 @@ export interface HerramientaLLM<TArgs = Record<string, unknown>, TResultado = un
   descripcion: string;
   parametros: Record<string, unknown>; // JSON Schema
   ejecutar(args: TArgs, ctx: { cfg: ClienteConfig; conv: ContextoConversacion }): Promise<TResultado>;
+  /**
+   * true = no se ofrece en la primera ronda obligatoria (tool_choice "required"). Sirve para herramientas de acción como
+   * pasar_a_persona: si estuvieran ahí, el modelo las usaría de atajo para no consultar la información.
+   */
+  soloTrasConsultar?: boolean;
 }
 
 export interface RespuestaLLM {
@@ -155,6 +160,8 @@ export interface RespuestaLLM {
   tokensSalida: number;
   latenciaMs: number;
   herramientasUsadas: string[];
+  /** Proveedor que respondió cada vuelta al modelo, en orden (campo "provider" de OpenRouter; "desconocido" si no vino). */
+  proveedores: string[];
   /** El LLM indicó que no tiene el dato → el código decide escalar. */
   noSeElDato: boolean;
 }
