@@ -3,6 +3,7 @@ import { guardarMensaje, obtenerContexto, type MensajeAGuardar } from '../conver
 import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
+import { avisarAlCelular } from '../salida/avisoEquipo.js';
 import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
 import { avisoPorRedDeSeguridad, motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
 import { EnvioIncierto } from '../salida/errores.js';
@@ -204,6 +205,7 @@ async function atenderMedia(cfg: ClienteConfig, conv: ContextoConversacion, tipo
   const nota = `📎 El huésped envió ${descripcionMedia(tipos)} (sin texto). ${estado} Revisa la conversación por si hace falta responderle.`;
   await enviarNotaPrivada(cfg, conv.chatwootConversationId, nota)
     .catch(avisarFallo('NO SE PUDO DEJAR LA NOTA AL EQUIPO (media)'));
+  await avisarAlCelular(cfg, conv.chatwootConversationId, nota);
 }
 
 /** Bot pausado: avisa al huésped UNA vez por pausa. Si falla, solo se registra (nunca dispara otro escalamiento). */
