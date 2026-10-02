@@ -6,6 +6,9 @@ const RELLENO = new Set(['para', 'como', 'cual', 'cuales', 'donde', 'tienen', 't
 /** Cuenta cuántas palabras de la consulta aparecen en el texto (compara las primeras 5 letras). */
 const puntuar = (tokens: string[], texto: string) => tokens.filter((t) => texto.includes(t.slice(0, 5))).length;
 
+const MIN_RESULTADOS = 3;
+const MAX_CON_EMPATES = 8;
+
 /** Busca en faq y politicas del cliente (activo=true) por palabras clave. Siempre filtra por ctx.cfg.id. */
 export const consultarFaq: HerramientaLLM<{ consulta?: string }> = {
   nombre: 'consultar_faq',
@@ -24,8 +27,12 @@ export const consultarFaq: HerramientaLLM<{ consulta?: string }> = {
     ]);
     const error = faq.error ?? pol.error;
     if (error) throw new Error(`consultar_faq: ${error.message}`);
-    const mejores = <T>(filas: T[], puntaje: (x: T) => number) =>
-      filas.map((x) => ({ x, n: puntaje(x) })).filter((y) => y.n > 0).sort((a, b) => b.n - a.n).slice(0, 3).map((y) => y.x);
+    // Las 3 mejores, más todas las que empaten con la tercera (hasta MAX_CON_EMPATES): el orden de la base no decide quién se queda fuera.
+    const mejores = <T>(filas: T[], puntaje: (x: T) => number) => {
+      const orden = filas.map((x) => ({ x, n: puntaje(x) })).filter((y) => y.n > 0).sort((a, b) => b.n - a.n);
+      const puntajeTercera = orden[MIN_RESULTADOS - 1]?.n;
+      return orden.filter((y, i) => i < MIN_RESULTADOS || y.n === puntajeTercera).slice(0, MAX_CON_EMPATES).map((y) => y.x);
+    };
     const faqs = mejores(faq.data ?? [], (f) => 2 * puntuar(tokens, norm((f.palabras_clave ?? []).join(' '))) + puntuar(tokens, norm(`${f.pregunta_es} ${f.categoria}`)))
       .map((f) => ({ pregunta: f.pregunta_es, respuesta: f.respuesta_es }));
     const politicas = mejores(pol.data ?? [], (p) => 2 * puntuar(tokens, norm(`${p.tipo} ${p.titulo}`)) + puntuar(tokens, norm(p.texto_es)))
