@@ -19,6 +19,8 @@ const PROMESAS: readonly RegExp[] = [
   /\b(paso|pase|pasare|pasaremos|voy a pasar|vamos a pasar|dejo|deje|dejare|voy a dejar)\s+(tu|su)\s+(consulta|solicitud|pregunta|mensaje|caso|duda|pedido)\b/,
   // "el equipo te confirma", "una persona del equipo te escribe", "alguien te contactará"
   new RegExp(`\\b(equipo|persona|alguien|asesor|asesora|recepcion)\\b[^.!?\\n]{0,25}\\b(te|le|les)\\s+(${VERBOS_ES})\\b`),
+  // "una persona del equipo continuará la conversación" (la frase que la herramienta pasar_a_persona le pide al modelo)
+  /\b(equipo|persona|alguien|asesor|asesora|recepcion)\b[^.!?\n]{0,25}\bcontinuara(n)?\s+(la\s+)?(conversacion|charla)\b/,
   // "te van a escribir"
   /\b(te|le|les)\s+(va|van)\s+a\s+(escribir|contactar|llamar|confirmar|responder)\b/,
   // "te contactarán pronto"

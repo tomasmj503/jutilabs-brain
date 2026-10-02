@@ -145,3 +145,38 @@ describe('promesaDePasarConsulta en alemán: frases normales, ofertas y condicio
     expect(promesaDePasarConsulta(t)).toBe(false);
   });
 });
+
+describe('promesaDePasarConsulta: "continuará la conversación" (C10 de la corrida del 2-oct)', () => {
+  // Es la frase que la propia herramienta pasar_a_persona le pide al modelo ("una persona del equipo continuará").
+  const promesas = [
+    // Respuestas reales de DeepSeek (Together / DeepInfra) que prometieron sin llamar a la herramienta
+    'Los descuentos por estadías extendidas los revisa directamente nuestro equipo, así que tu consulta ya queda en sus manos y una persona continuará la conversación contigo.',
+    'Mientras tanto, una persona del equipo continuará la conversación para revisar tu caso 🌿',
+    'Una persona del equipo continuará la conversación contigo.',
+    'Alguien del equipo continuará la conversación mañana.',
+  ];
+  it.each(promesas)('detecta: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(true);
+  });
+
+  const noDeben = [
+    // Ofertas y preguntas: avisar pausaría el bot antes de que el huésped conteste
+    '¿Quieres que una persona del equipo continúe la conversación?',
+    '¿Una persona del equipo continuará la conversación contigo?',
+    'Puedo pedir que una persona del equipo continúe la conversación si lo prefieres.',
+    // Condicionales con "si": dependen de que el huésped conteste primero
+    'Si quieres, una persona del equipo continuará la conversación contigo.',
+    'Si me compartes tus fechas, una persona del equipo continuará la conversación.',
+    // Otros usos normales
+    'Mañana continuaremos la conversación sobre las clases de yoga.',
+    'La recepción continuará abierta las 24 horas.',
+    'Continuará la programación de yoga los jueves a las 7:30 p. m.',
+  ];
+  it.each(noDeben)('NO avisa: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+
+  it('motivoParaAvisarAlEquipo avisa con esa promesa aunque el modelo no llame a la herramienta', () => {
+    expect(motivoParaAvisarAlEquipo(null, [], 'Mientras tanto, una persona del equipo continuará la conversación para revisar tu caso 🌿')).toBe('fuera_de_alcance');
+  });
+});
