@@ -52,6 +52,8 @@ export interface Ejecucion {
   latenciaMs: number;
   tokensEntrada: number;
   tokensSalida: number;
+  /** Proveedor de cada vuelta al modelo. Las pruebas viejas no lo traen. */
+  proveedores?: string[];
 }
 
 export type Falla =
@@ -296,6 +298,20 @@ export function percentil(valores: number[], p: number): number {
   const orden = [...valores].sort((a, b) => a - b);
   const i = Math.min(orden.length - 1, Math.max(0, Math.ceil((p / 100) * orden.length) - 1));
   return orden[i] ?? 0;
+}
+
+export interface LatenciaProveedor { proveedor: string; corridas: number; p50Ms: number; p95Ms: number }
+
+/** Latencia por proveedor. Una consulta que pasó por varios (3-4 vueltas) cuenta bajo "A + B". Los errores de la API no cuentan. */
+export function latenciaPorProveedor(corridas: Corrida[]): LatenciaProveedor[] {
+  const grupos = new Map<string, number[]>();
+  for (const c of corridas) {
+    if (c.ej.error) continue;
+    const unicos = [...new Set(c.ej.proveedores ?? [])];
+    const clave = unicos.length === 0 ? 'sin dato' : unicos.join(' + ');
+    grupos.set(clave, [...(grupos.get(clave) ?? []), c.ej.latenciaMs]);
+  }
+  return [...grupos].map(([proveedor, ms]) => ({ proveedor, corridas: ms.length, p50Ms: percentil(ms, 50), p95Ms: percentil(ms, 95) }));
 }
 
 export function resumir(corridas: Corrida[], criterios: Criterios = CRITERIOS): ResumenModelo {

@@ -43,6 +43,7 @@ async function conversar(
   const usadas: string[] = [];
   let tokensEntrada = 0;
   let tokensSalida = 0;
+  const proveedores: string[] = [];
 
   for (let ronda = 0; ronda <= MAX_RONDAS_HERRAMIENTAS; ronda++) {
     const rondaForzada = forzarHerramienta && ronda === 0;
@@ -61,6 +62,8 @@ async function conversar(
     };
     const r = await cliente.chat.completions.create(cuerpo as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming);
 
+    // OpenRouter agrega "provider" a la respuesta (no está en el tipo de OpenAI).
+    proveedores.push((r as { provider?: string }).provider || 'desconocido');
     tokensEntrada += r.usage?.prompt_tokens ?? 0;
     tokensSalida += r.usage?.completion_tokens ?? 0;
 
@@ -81,6 +84,7 @@ async function conversar(
         tokensSalida,
         latenciaMs: Date.now() - inicio,
         herramientasUsadas: usadas,
+        proveedores,
         noSeElDato,
       };
     }

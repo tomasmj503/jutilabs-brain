@@ -14,8 +14,8 @@ import { parseArgs } from 'node:util';
 import OpenAI from 'openai';
 import type { ClienteConfig, ContextoConversacion, HerramientaLLM, MensajeEntrante, TurnoEntrante } from '../../src/types/index.js';
 import {
-  CRITERIOS, evaluar, extraerMontos, montosDeSalidas, resumir,
-  type Caso, type Corrida, type Ejecucion, type LlamadaHerramienta,
+  CRITERIOS, evaluar, extraerMontos, latenciaPorProveedor, montosDeSalidas, resumir,
+  type Caso, type Corrida, type Ejecucion, type LatenciaProveedor, type LlamadaHerramienta,
 } from './evaluar.js';
 
 /** Clave de OpenRouter SOLO para esta prueba, con tope de gasto propio (no la de Mandala). */
@@ -255,7 +255,7 @@ async function ejecutarCaso(caso: Caso, modelo: string, modo: Modo): Promise<Eje
       const r = await conReintento429(modelo, llamadas, () => llamarLLMConReintento(mensajes, herramientas.map((h) => envolver(h, llamadas)), { cfg, conv }, { forzarHerramienta: !saludo }));
       salidas.push({
         ...base, texto: r.texto, noSeElDato: r.noSeElDato, llamadas, sinModelo: false,
-        latenciaMs: r.latenciaMs, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida,
+        latenciaMs: r.latenciaMs, tokensEntrada: r.tokensEntrada, tokensSalida: r.tokensSalida, proveedores: r.proveedores,
       });
       if (r.noSeElDato) break; // en producción el bot se pausa: no hay siguiente mensaje
       historial.push({ rol: 'huesped', contenido: texto }, { rol: 'bot', contenido: r.texto });
@@ -316,6 +316,7 @@ async function recalificar(carpeta: string | undefined): Promise<void> {
   for (const [m, n] of Object.entries(previo.reintentos429 ?? {})) reintentos429.set(m, n);
 
   const resumenes: Record<string, ReturnType<typeof resumir>> = {};
+  const porProveedor: Record<string, LatenciaProveedor[]> = {};
   const errores: Record<string, Map<string, number>> = {};
   const fallas: Record<string, string[]> = {};
   const router = new Map<string, boolean>();
@@ -334,13 +335,14 @@ async function recalificar(carpeta: string | undefined): Promise<void> {
       casosVistos.set(caso.id, caso);
     }
     resumenes[modelo] = resumir(corridas);
+    porProveedor[modelo] = latenciaPorProveedor(corridas);
     const d = detalleDe(corridas);
     errores[modelo] = d.errores;
     fallas[modelo] = d.fallas;
   }
-  const md = resumenEnMarkdown(`${previo.marca} (recalificada)`, modelos, resumenes, [...casosVistos.values()], router, errores, previo.modos, fallas);
+  const md = resumenEnMarkdown(`${previo.marca} (recalificada)`, modelos, resumenes, [...casosVistos.values()], router, errores, previo.modos, fallas, porProveedor);
   await writeFile(`${dir}resumen-recalificado.md`, md);
-  await writeFile(`${dir}resumen-recalificado.json`, JSON.stringify({ marca: previo.marca, hoy: previo.hoy, modos: previo.modos, criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
+  await writeFile(`${dir}resumen-recalificado.json`, JSON.stringify({ marca: previo.marca, hoy: previo.hoy, modos: previo.modos, criterios: CRITERIOS, resumenes, porProveedor, precios: PRECIOS }, null, 2));
   console.log(`Recalificada sin gastar nada. Guardado en ${dir}resumen-recalificado.md\n`);
   console.log(md);
 }
@@ -366,6 +368,7 @@ async function correrPrueba(): Promise<void> {
   console.log(`Modelos: ${modelos.join(', ')}${modelos.includes(cfg0.llmModelo) ? `  (referencia: ${cfg0.llmModelo} es el modelo actual del cliente)` : ''}\n`);
 
   const resumenes: Record<string, ReturnType<typeof resumir>> = {};
+  const porProveedor: Record<string, LatenciaProveedor[]> = {};
   const errores: Record<string, Map<string, number>> = {};
   const modos: Record<string, Modo> = {};
   const fallas: Record<string, string[]> = {};
@@ -402,13 +405,14 @@ async function correrPrueba(): Promise<void> {
     const slug = modelo.replace(/[^a-z0-9.]+/gi, '_');
     await writeFile(`${dir}${slug}.jsonl`, `${lineas.join('\n')}\n`);
     resumenes[modelo] = resumir(corridas);
+    porProveedor[modelo] = latenciaPorProveedor(corridas);
     const detalle = detalleDe(corridas);
     errores[modelo] = detalle.errores;
     fallas[modelo] = detalle.fallas;
   }
 
-  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, modos, reintentos429: Object.fromEntries(reintentos429), criterios: CRITERIOS, resumenes, precios: PRECIOS }, null, 2));
-  await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores, modos, fallas));
+  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, modos, reintentos429: Object.fromEntries(reintentos429), criterios: CRITERIOS, resumenes, porProveedor, precios: PRECIOS }, null, 2));
+  await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores, modos, fallas, porProveedor));
   console.log(`\nListo. Resultados en ${dir}`);
   console.log(await readFile(`${dir}resumen.md`, 'utf8'));
 }
@@ -416,6 +420,7 @@ async function correrPrueba(): Promise<void> {
 function resumenEnMarkdown(
   marca: string, modelos: string[], r: Record<string, ReturnType<typeof resumir>>, casos: Caso[], router: Map<string, boolean>,
   errores: Record<string, Map<string, number>>, modos: Record<string, Modo>, fallas: Record<string, string[]>,
+  porProveedor: Record<string, LatenciaProveedor[]>,
 ): string {
   const L: string[] = [`# Resumen prueba LLM ${marca}\n`, `Razonamiento pedido: **${values.razonamiento}**\n`];
   L.push('Criterios (fijados antes de correr): monto inventado 0 · dijo algo prohibido 0 · escalamiento correcto ≥95% · falsa escalación ≤5% · herramienta correcta ≥95% · consistencia ≥90% · errores API ≤2% · latencia p95 ≤12 s\n');
@@ -444,6 +449,12 @@ function resumenEnMarkdown(
   }
   L.push('\n## Razonamiento usado y límites de velocidad\n');
   for (const m of modelos) L.push(`- ${m}: razonamiento **${modos[m] ?? '—'}**${modos[m] === 'normal' && values.razonamiento === 'auto' ? ' (el proveedor no deja apagarlo)' : ''}; reintentos por límite de velocidad (429): ${reintentos429.get(m) ?? 0}`);
+  L.push('\n## Latencia por proveedor (quién respondió; "A + B" = la consulta pasó por varios)\n');
+  for (const m of modelos) {
+    L.push(`**${m}**`);
+    L.push('| Proveedor | Consultas | p50 | p95 |', '|---|---|---|---|');
+    for (const f of porProveedor[m] ?? []) L.push(`| ${f.proveedor} | ${f.corridas} | ${(f.p50Ms / 1000).toFixed(1)} s | ${(f.p95Ms / 1000).toFixed(1)} s |`);
+  }
   const conFallas = modelos.filter((m) => (fallas[m]?.length ?? 0) > 0);
   if (conFallas.length > 0) {
     L.push('\n## Fallas por caso (sin contar errores de la API)\n');

@@ -160,6 +160,8 @@ export interface RespuestaLLM {
   tokensSalida: number;
   latenciaMs: number;
   herramientasUsadas: string[];
+  /** Proveedor que respondió cada vuelta al modelo, en orden (campo "provider" de OpenRouter; "desconocido" si no vino). */
+  proveedores: string[];
   /** El LLM indicó que no tiene el dato → el código decide escalar. */
   noSeElDato: boolean;
 }

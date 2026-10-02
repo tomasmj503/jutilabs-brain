@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CRITERIOS, evaluar, extraerMontos, fechaEsperada, montosDeSalidas, percentil, plano, resumir,
+  CRITERIOS, evaluar, extraerMontos, fechaEsperada, latenciaPorProveedor, montosDeSalidas, percentil, plano, resumir,
   type Caso, type Corrida, type Ejecucion,
 } from '../prueba-llm/evaluar.js';
 
@@ -244,5 +244,32 @@ describe('evaluar: la promesa sin herramienta cuenta como pasar a una persona (m
   it('si escribió [[NO_SE]] el texto del modelo no sale: una promesa dentro de ese texto no cuenta como segundo aviso', () => {
     const r = evaluar(caso({ esperado: 'responde' }), ej({ texto: promesa, noSeElDato: true }), ctx);
     expect(r.fallas.filter((f) => f === 'falsa_escalacion')).toHaveLength(1);
+  });
+});
+
+describe('latenciaPorProveedor', () => {
+  const corrida = (e: Partial<Ejecucion>, rep = 0): Corrida => {
+    const cs = caso({ id: 'A' });
+    const x = ej(e);
+    return { caso: cs, rep, ej: x, ev: evaluar(cs, x, ctx) };
+  };
+  it('agrupa por proveedor y calcula p50 / p95 de cada uno', () => {
+    const filas = latenciaPorProveedor([
+      corrida({ proveedores: ['DeepInfra'], latenciaMs: 2000 }, 0),
+      corrida({ proveedores: ['DeepInfra'], latenciaMs: 4000 }, 1),
+      corrida({ proveedores: ['Novita'], latenciaMs: 9000 }, 2),
+    ]);
+    expect(filas).toEqual([
+      { proveedor: 'DeepInfra', corridas: 2, p50Ms: 2000, p95Ms: 4000 },
+      { proveedor: 'Novita', corridas: 1, p50Ms: 9000, p95Ms: 9000 },
+    ]);
+  });
+  it('si una consulta pasó por varios proveedores, los junta con " + " (sin repetir)', () => {
+    const filas = latenciaPorProveedor([corrida({ proveedores: ['DeepInfra', 'Novita', 'DeepInfra'], latenciaMs: 7000 })]);
+    expect(filas.map((f) => f.proveedor)).toEqual(['DeepInfra + Novita']);
+  });
+  it('pruebas viejas (sin proveedor) van a "sin dato"; los errores de la API no cuentan', () => {
+    const filas = latenciaPorProveedor([corrida({ latenciaMs: 3000 }), corrida({ error: 'boom', latenciaMs: 25000, proveedores: ['Novita'] }, 1)]);
+    expect(filas).toEqual([{ proveedor: 'sin dato', corridas: 1, p50Ms: 3000, p95Ms: 3000 }]);
   });
 });
