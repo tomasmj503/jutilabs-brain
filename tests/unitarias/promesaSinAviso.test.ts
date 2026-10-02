@@ -180,3 +180,65 @@ describe('promesaDePasarConsulta: "continuará la conversación" (C10 de la corr
     expect(motivoParaAvisarAlEquipo(null, [], 'Mientras tanto, una persona del equipo continuará la conversación para revisar tu caso 🌿')).toBe('fuera_de_alcance');
   });
 });
+
+describe('promesaDePasarConsulta: "una persona / alguien + continuará…", termine como termine (C10 del 2-oct)', () => {
+  const promesas = [
+    // Las 3 respuestas reales de C10 que prometieron sin llamar a la herramienta
+    'Los descuentos por estadías extendidas los revisa directamente nuestro equipo, así que tu consulta ya queda en sus manos y una persona continuará la conversación contigo.',
+    'Mientras tanto, una persona del equipo continuará la conversación para revisar tu caso 🌿',
+    'Una persona del equipo continuará con tu consulta del descuento ✨',
+    // Otros finales
+    'Una persona continuará con tu consulta.',
+    'Alguien del equipo continuará con tu reserva.',
+    'Un asesor continuará la atención desde aquí.',
+    'Una persona de nuestro equipo continuará ayudándote con las fechas.',
+    // Inglés (la propia herramienta pide "una persona del equipo continuará"; el modelo lo traduce)
+    'A team member will continue the conversation with you.',
+    'Someone from the team will continue with your request.',
+    'A team member will continue helping you from here.',
+  ];
+  it.each(promesas)('detecta: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(true);
+  });
+
+  const noDeben = [
+    // Ofertas y preguntas
+    '¿Una persona del equipo continuará con tu consulta?',
+    '¿Quieres que una persona del equipo continúe con tu consulta?',
+    'Would you like a team member to continue the conversation?',
+    // Condicionales con "si" / "if"
+    'Si quieres, una persona del equipo continuará con tu consulta.',
+    'Si me compartes tus fechas, alguien del equipo continuará con tu reserva.',
+    'If you like, a team member will continue the conversation with you.',
+    // Otros usos normales de "continuará" / "will continue"
+    'La recepción continuará abierta las 24 horas.',
+    'El check-in continuará hasta las 10 p. m.',
+    'The team will continue to welcome guests until 10 pm.',
+    'The yoga schedule will continue on Thursdays.',
+  ];
+  it.each(noDeben)('NO avisa: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+});
+
+describe('promesaDePasarConsulta: "el equipo continuará…" solo con finales de promesa (C05 y C06 del 30-sep)', () => {
+  const promesas = [
+    'El equipo continuará la conversación contigo para diseñar el retiro a tu medida ✨',
+    'El equipo de Mandala continuará la conversación contigo para ver fechas, espacio y detalles.',
+    'El equipo continuará con tu consulta mañana.',
+    'El equipo continuará contigo para confirmar los cupos.',
+  ];
+  it.each(promesas)('detecta: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(true);
+  });
+  const noDeben = [
+    'El equipo continuará abierto hasta las 10 p. m.',
+    'El equipo continuará con la limpieza de las habitaciones.',
+    'El equipo de cocina continuará sirviendo el desayuno hasta las 10.',
+    'Si quieres, el equipo continuará la conversación contigo.',
+    '¿El equipo continuará la conversación contigo?',
+  ];
+  it.each(noDeben)('NO avisa: %s', (t) => {
+    expect(promesaDePasarConsulta(t)).toBe(false);
+  });
+});

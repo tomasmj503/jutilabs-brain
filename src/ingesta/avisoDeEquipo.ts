@@ -19,8 +19,11 @@ const PROMESAS: readonly RegExp[] = [
   /\b(paso|pase|pasare|pasaremos|voy a pasar|vamos a pasar|dejo|deje|dejare|voy a dejar)\s+(tu|su)\s+(consulta|solicitud|pregunta|mensaje|caso|duda|pedido)\b/,
   // "el equipo te confirma", "una persona del equipo te escribe", "alguien te contactará"
   new RegExp(`\\b(equipo|persona|alguien|asesor|asesora|recepcion)\\b[^.!?\\n]{0,25}\\b(te|le|les)\\s+(${VERBOS_ES})\\b`),
-  // "una persona del equipo continuará la conversación" (la frase que la herramienta pasar_a_persona le pide al modelo)
-  /\b(equipo|persona|alguien|asesor|asesora|recepcion)\b[^.!?\n]{0,25}\bcontinuara(n)?\s+(la\s+)?(conversacion|charla)\b/,
+  // "una persona (del equipo) continuará…", termine como termine: la frase que la herramienta pasar_a_persona le pide al modelo.
+  // Solo con sujeto humano ("la recepción continuará abierta" no es una promesa).
+  /\b(una\s+persona|un\s+asesor|una\s+asesora|un\s+miembro|alguien)\b[^.!?\n]{0,30}\bcontinuara(n)?\b/,
+  // "el equipo continuará la conversación / contigo / con tu consulta" (no "el equipo continuará abierto" ni "con la limpieza")
+  /\bequipo\b[^.!?\n]{0,25}\bcontinuara(n)?\s+(la\s+(conversacion|charla)|contigo|con\s+(tu|su)\s+(consulta|solicitud|caso|reserva|pregunta|duda|pedido))\b/,
   // "te van a escribir"
   /\b(te|le|les)\s+(va|van)\s+a\s+(escribir|contactar|llamar|confirmar|responder)\b/,
   // "te contactarán pronto"
@@ -30,6 +33,8 @@ const PROMESAS: readonly RegExp[] = [
   // Inglés: "I'll pass your question to the team", "the team will get back to you"
   /\b(i'll|i will|i am going to|i'm going to)\s+(pass|forward|send)\s+(your|this)\s+(question|request|inquiry|message|query)\b/,
   /\b(team|someone|somebody|staff)\b[^.!?\n]{0,40}\b(will|is going to|'ll)\s+(get back|reach out|contact|be in touch|follow up|write|respond|message)\b/,
+  // "A team member will continue the conversation / with your request" (pero no "the team will continue to welcome guests")
+  /\b(team|someone|somebody|staff)\b[^.!?\n]{0,40}\b(will|is going to|'ll)\s+continue\s+(the\s+(conversation|chat)|with\s+(you|your)\b|helping\s+you|assisting\s+you)/,
 ];
 
 const SUJETO_DE = 'team|teammitglied|jemand|kollege|kollegin|mitarbeiter|mitarbeiterin';
