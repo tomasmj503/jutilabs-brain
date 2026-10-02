@@ -110,6 +110,18 @@ describe('evaluar — texto', () => {
     const r = evaluar(caso({ prohibido: ['8:00 a. m.'] }), ej({ texto: 'Abrimos a las 8:00 a.m. todos los días' }), ctx);
     expect(r.graves).toContain('prohibido');
   });
+  it('lo prohibido solo cuenta desde el inicio de una palabra (F08: "variantes seguras" no es "es seguro")', () => {
+    const c = caso({ prohibido: ['essegur', 'nohayproblema'] });
+    expect(evaluar(c, ej({ texto: 'Avisa al profe antes para que te dé variantes seguras.' }), ctx).ok).toBe(true);
+    expect(evaluar(c, ej({ texto: 'Tranquilo, es seguro para tu espalda.' }), ctx).graves).toContain('prohibido');
+    expect(evaluar(c, ej({ texto: 'No hay problema, ven cuando quieras.' }), ctx).graves).toContain('prohibido');
+  });
+  it('lo prohibido sigue encontrando precios, horas y símbolos', () => {
+    expect(evaluar(caso({ prohibido: ['460000'] }), ej({ texto: 'El paquete de 12 vale $460.000 COP' }), ctx).graves).toContain('prohibido');
+    expect(evaluar(caso({ prohibido: ['8:00am'] }), ej({ texto: 'Abre de 8:00 a. m. a 8:00 p. m.' }), ctx).graves).toContain('prohibido');
+    expect(evaluar(caso({ prohibido: ['%'] }), ej({ texto: 'Tienes 15% de descuento' }), ctx).graves).toContain('prohibido');
+    expect(evaluar(caso({ prohibido: ['mandala-yoga-hostel'] }), ej({ texto: 'Mira https://x.com/mandala-yoga-hostel/book' }), ctx).graves).toContain('prohibido');
+  });
   it('exige al menos una alternativa de cada grupo', () => {
     const c = caso({ contiene: [['1:00pm', '13:00'], ['11:00am', '11:00']] });
     expect(evaluar(c, ej({ texto: 'El check-in es a la 1:00 p. m. y el check-out a las 11:00 a. m.' }), ctx).ok).toBe(true);

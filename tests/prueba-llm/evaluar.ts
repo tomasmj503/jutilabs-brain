@@ -85,6 +85,23 @@ export function plano(s: string): string {
   return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[.,\s]/g, '');
 }
 
+/**
+ * ¿El texto dice `buscado`? Compara en forma plana (sin tildes, puntos, comas ni espacios), pero solo
+ * desde el inicio de una palabra: así "variantes seguras" no contiene "es segur" (caso F08, 2-oct-2026).
+ * Si lo buscado empieza con un símbolo (%, $, [[), se busca en cualquier parte, como antes.
+ */
+export function diceDesdeInicioDePalabra(texto: string, buscado: string): boolean {
+  const objetivo = plano(buscado);
+  if (!objetivo) return false;
+  if (!/^[\p{L}\p{N}]/u.test(objetivo)) return plano(texto).includes(objetivo);
+  const base = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  for (let i = 0; i < base.length; i++) {
+    if (i > 0 && /[\p{L}\p{N}]/u.test(base.charAt(i - 1))) continue;
+    if (plano(base.slice(i, i + objetivo.length * 3 + 10)).startsWith(objetivo)) return true;
+  }
+  return false;
+}
+
 function aNumero(crudo: string): number | null {
   const s = crudo.replace(/[.,]+$/, '');
   if (/^\d{1,3}([.,]\d{3})+$/.test(s)) return Number(s.replace(/[.,]/g, ''));
@@ -203,7 +220,7 @@ export function evaluar(caso: Caso, ej: Ejecucion, ctx: ContextoEvaluacion): Eva
   if (fuera.length > 0) marcar('monto', `montos no permitidos: ${fuera.join(', ')}`);
 
   const p = plano(ej.texto);
-  const dichos = caso.prohibido.filter((x) => p.includes(plano(x)));
+  const dichos = caso.prohibido.filter((x) => diceDesdeInicioDePalabra(ej.texto, x));
   if (dichos.length > 0) marcar('prohibido', `dijo lo prohibido: ${dichos.join(', ')}`);
 
   for (const grupo of caso.contiene) {
