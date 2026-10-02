@@ -38,6 +38,12 @@ describe('llamarLLM — parámetros extra del cliente', () => {
     expect(llamadas[0]?.model).toBe('qwen/qwen3.8-flash');
     expect(llamadas[0]?.max_tokens).toBe(500);
   });
+  it('manda el objeto provider (orden de proveedores) tal cual a OpenRouter', async () => {
+    const provider = { sort: 'latency', data_collection: 'deny' };
+    await llamarLLM(mensajes, [], { cfg: cfg({ llmExtra: { reasoning: { enabled: false }, provider } }), conv });
+    expect(llamadas[0]?.provider).toEqual(provider);
+    expect(llamadas[0]?.reasoning).toEqual({ enabled: false });
+  });
   it('sin configuración no manda nada extra', async () => {
     await llamarLLM(mensajes, [], { cfg: cfg({}), conv });
     expect(llamadas[0]).not.toHaveProperty('reasoning');

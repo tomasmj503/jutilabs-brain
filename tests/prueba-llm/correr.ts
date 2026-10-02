@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import OpenAI from 'openai';
 import type { ClienteConfig, ContextoConversacion, HerramientaLLM, MensajeEntrante, TurnoEntrante } from '../../src/types/index.js';
+import { armarLlmExtra, leerExtra } from './extra.js';
 import {
   CRITERIOS, evaluar, extraerMontos, latenciaPorProveedor, montosDeSalidas, resumir,
   type Caso, type Corrida, type Ejecucion, type LatenciaProveedor, type LlamadaHerramienta,
@@ -50,6 +51,7 @@ const { values, positionals } = parseArgs({
     casos: { type: 'string' },
     concurrencia: { type: 'string', default: '3' },
     razonamiento: { type: 'string', default: 'auto' },
+    extra: { type: 'string' },
     salida: { type: 'string', default: 'tests/prueba-llm/resultados' },
   },
 });
@@ -59,6 +61,14 @@ const repeticiones = Math.max(1, Number(values.rep));
 const concurrencia = Math.max(1, Number(values.concurrencia));
 if (values.razonamiento !== 'auto' && values.razonamiento !== 'apagado' && values.razonamiento !== 'normal') {
   console.error('--razonamiento debe ser "auto" (por defecto), "apagado" (se manda a todos) o "normal" (no se manda nada).');
+  process.exit(1);
+}
+
+let extraManual: Record<string, unknown>;
+try {
+  extraManual = leerExtra(values.extra);
+} catch (e) {
+  console.error(e instanceof Error ? e.message : e);
   process.exit(1);
 }
 
@@ -219,9 +229,10 @@ async function conReintento429(modelo: string, llamadas: LlamadaHerramienta[], f
 /** Un caso completo (uno o varios mensajes del huésped, en orden) contra UN modelo. Devuelve lo que pasó en cada mensaje. */
 async function ejecutarCaso(caso: Caso, modelo: string, modo: Modo): Promise<Ejecucion[]> {
   const { llmExtra: _propio, ...configExtraSinExtra } = cfg0.configExtra;
+  const llmExtra = armarLlmExtra(modo, extraManual);
   const cfg: ClienteConfig = {
     ...cfg0, llmModelo: modelo, llmModeloRespaldo: null, openrouterKeyRef: CLAVE_REF,
-    configExtra: modo === 'apagado' ? { ...configExtraSinExtra, llmExtra: { reasoning: { enabled: false } } } : configExtraSinExtra,
+    configExtra: { ...configExtraSinExtra, ...(llmExtra ? { llmExtra } : {}) },
   };
   const historial: Array<{ rol: 'huesped' | 'bot'; contenido: string }> = [];
   const salidas: Ejecucion[] = [];
@@ -365,6 +376,7 @@ async function correrPrueba(): Promise<void> {
   await mkdir(dir, { recursive: true });
   console.log(`Prueba ${marca}: ${modelos.length} modelos x ${casos.length} casos x ${repeticiones} repeticiones = ${modelos.length * casos.length * repeticiones} corridas`);
   console.log(`Razonamiento: ${values.razonamiento === 'auto' ? 'automático (se apaga si el modelo lo permite)' : values.razonamiento}`);
+  if (values.extra) console.log(`Extra (--extra): ${JSON.stringify(extraManual)}`);
   console.log(`Modelos: ${modelos.join(', ')}${modelos.includes(cfg0.llmModelo) ? `  (referencia: ${cfg0.llmModelo} es el modelo actual del cliente)` : ''}\n`);
 
   const resumenes: Record<string, ReturnType<typeof resumir>> = {};
@@ -411,7 +423,7 @@ async function correrPrueba(): Promise<void> {
     fallas[modelo] = detalle.fallas;
   }
 
-  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, modos, reintentos429: Object.fromEntries(reintentos429), criterios: CRITERIOS, resumenes, porProveedor, precios: PRECIOS }, null, 2));
+  await writeFile(`${dir}resumen.json`, JSON.stringify({ marca, hoy, razonamiento: values.razonamiento, extra: extraManual, modos, reintentos429: Object.fromEntries(reintentos429), criterios: CRITERIOS, resumenes, porProveedor, precios: PRECIOS }, null, 2));
   await writeFile(`${dir}resumen.md`, resumenEnMarkdown(marca, modelos, resumenes, casos, hallazgosRouter, errores, modos, fallas, porProveedor));
   console.log(`\nListo. Resultados en ${dir}`);
   console.log(await readFile(`${dir}resumen.md`, 'utf8'));
@@ -422,7 +434,7 @@ function resumenEnMarkdown(
   errores: Record<string, Map<string, number>>, modos: Record<string, Modo>, fallas: Record<string, string[]>,
   porProveedor: Record<string, LatenciaProveedor[]>,
 ): string {
-  const L: string[] = [`# Resumen prueba LLM ${marca}\n`, `Razonamiento pedido: **${values.razonamiento}**\n`];
+  const L: string[] = [`# Resumen prueba LLM ${marca}\n`, `Razonamiento pedido: **${values.razonamiento}**${values.extra ? ` · Extra (--extra): \`${JSON.stringify(extraManual)}\`` : ''}\n`];
   L.push('Criterios (fijados antes de correr): monto inventado 0 · dijo algo prohibido 0 · escalamiento correcto ≥95% · falsa escalación ≤5% · herramienta correcta ≥95% · consistencia ≥90% · errores API ≤2% · latencia p95 ≤12 s\n');
   L.push('| Modelo | Aprobadas | Montos inventados | Prohibido | Escala bien | Falsa escal. | Herramienta | Consistencia | Error API | p50 / p95 | USD por 1000 turnos | Veredicto |');
   L.push('|---|---|---|---|---|---|---|---|---|---|---|---|');

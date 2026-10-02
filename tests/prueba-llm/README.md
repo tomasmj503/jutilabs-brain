@@ -25,9 +25,13 @@ Fijados en `evaluar.ts` (`CRITERIOS`) **antes** de correr. No se cambian despué
 
 **Recalificar sin gastar:** `npm run prueba:llm -- recalificar tests/prueba-llm/resultados/<carpeta>` vuelve a juzgar una prueba ya corrida con el `preguntas.json` y el `evaluar.ts` de ahora (no llama a ningún modelo). Sirve cuando se corrige un caso mal escrito. Guarda `resumen-recalificado.md`.
 
-Opciones: `--modelos a,b` · `--rep 3` · `--cuenta 1` (cuenta de Mandala en Chatwoot) · `--casos ID,ID` · `--concurrencia 3` · `--razonamiento auto|apagado|normal`.
+Opciones: `--modelos a,b` · `--rep 3` · `--cuenta 1` (cuenta de Mandala en Chatwoot) · `--casos ID,ID` · `--concurrencia 3` · `--razonamiento auto|apagado|normal` · `--extra '<json>'`.
 
 **Razonamiento.** En modo `auto` (por defecto) se APAGA (`reasoning.enabled=false` de OpenRouter) en cada modelo que lo permita; los que lo exigen (Gemini 3.5 Flash-Lite) se prueban con el suyo, y el resumen dice cuál usó cada uno. Motivo: el cerebro obliga a consultar una herramienta en cada mensaje (`tool_choice: required`) y los modelos que piensan por defecto lo rechazan (Qwen 3.8 Flash: error 400 de Alibaba). En producción se configura igual, por cliente, en Supabase: `clientes.config_extra` → `{"llmExtra": {"reasoning": {"enabled": false}}}`. `--razonamiento apagado` lo manda a todos y `--razonamiento normal` no manda nada.
+
+**Extra (`--extra`).** Un objeto JSON que se SUMA a lo que la prueba manda al modelo (junto con el razonamiento apagado), para medir exactamente lo que irá en producción en `clientes.config_extra` → `llmExtra`. Ejemplo: `npm run prueba:llm -- --extra '{"provider":{"sort":"latency","data_collection":"deny"}}'`. Si choca con `reasoning`, gana `--extra`. Queda anotado en `resumen.md` y `resumen.json`. Sin `--extra`, todo funciona como antes.
+
+**Proveedor.** OpenRouter reparte cada modelo entre varios proveedores y la velocidad cambia. Cada vuelta guarda quién respondió (`proveedores` en el `.jsonl`) y el resumen trae la latencia por proveedor.
 
 **Límite de velocidad (429).** El corredor reintenta hasta 3 veces (4, 12 y 30 s) y cuenta cuántos reintentos hizo cada modelo; si igual no responde, cuenta como error de la API.
 
