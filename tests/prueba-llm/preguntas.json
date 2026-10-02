@@ -363,7 +363,7 @@
         "paquete 4 clases $160.000 COP"
       ],
       "no_debe": [
-        "precios de paquetes de 8 y 12 (sin confirmar), salvo que estén activos en Supabase"
+        "precio del paquete de 12 (inactivo)"
       ],
       "contiene": [
         [
@@ -374,7 +374,6 @@
         ]
       ],
       "prohibido": [
-        "323000",
         "460000"
       ],
       "nota": ""
@@ -426,9 +425,7 @@
         "café vegetariano",
         "se entra por el timbre / recepción"
       ],
-      "no_debe": [
-        "dar un horario (no está confirmado)"
-      ],
+      "no_debe": [],
       "contiene": [
         [
           "cafe"
@@ -438,14 +435,7 @@
           "timbre"
         ]
       ],
-      "prohibido": [
-        "8am",
-        "8:00am",
-        "8pm",
-        "8:00pm",
-        "20:00",
-        "08:00"
-      ],
+      "prohibido": [],
       "nota": ""
     },
     {
@@ -666,24 +656,25 @@
       "turnos": [
         "A qué hora abre el café?"
       ],
-      "esperado": "escala",
+      "esperado": "responde",
       "herramientas": [],
       "debe_incluir": [
-        "reconoce que quiere dar el dato correcto",
-        "pasa la consulta al equipo"
+        "horario 8 a. m. a 8 p. m."
       ],
       "no_debe": [
-        "dar un horario (8 a. m. - 8 p. m. no está confirmado)"
+        "pasar a una persona sin necesidad"
       ],
-      "contiene": [],
-      "prohibido": [
-        "8am",
-        "8:00am",
-        "8pm",
-        "8:00pm",
-        "20:00",
-        "08:00"
+      "contiene": [
+        [
+          "8am",
+          "8:00am"
+        ],
+        [
+          "8pm",
+          "8:00pm"
+        ]
       ],
+      "prohibido": [],
       "nota": ""
     },
     {
@@ -752,16 +743,16 @@
       "id": "B05",
       "categoria": "B-no-inventar",
       "turnos": [
-        "Se puede pagar con tarjeta o Nequi?"
+        "Se puede pagar con Nequi? me pasas el número?"
       ],
       "esperado": "escala",
       "herramientas": [],
       "debe_incluir": [
-        "no inventa",
-        "pasa al equipo"
+        "da los medios de pago",
+        "pasa al equipo el número de Nequi"
       ],
       "no_debe": [
-        "listar medios de pago"
+        "inventar un número o una cuenta"
       ],
       "contiene": [],
       "prohibido": [],
@@ -771,7 +762,7 @@
       "id": "B06",
       "categoria": "B-no-inventar",
       "turnos": [
-        "Cuál es la tarifa especial de yoga para huéspedes?"
+        "La tarifa de huésped aplica también a los paquetes de clases?"
       ],
       "esperado": "escala",
       "herramientas": [
@@ -779,11 +770,11 @@
         "consultar_faq"
       ],
       "debe_incluir": [
-        "confirma que existe",
-        "pasa al equipo para el valor"
+        "tarifa de huésped $40.000 por clase",
+        "pasa al equipo lo de paquetes"
       ],
       "no_debe": [
-        "inventar un descuento o porcentaje"
+        "inventar si aplica o no a paquetes"
       ],
       "contiene": [],
       "prohibido": [
@@ -1479,11 +1470,11 @@
       ],
       "contiene": [
         [
-          "280000"
+          "323000"
         ]
       ],
       "prohibido": [],
-      "nota": "Depende del precio ACTIVO en la base al 29-sep-2026 ($280.000). Si Diego confirma otro, actualizar aquí"
+      "nota": "Precio confirmado por Diego el 1-oct-2026"
     },
     {
       "id": "G01",
