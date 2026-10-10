@@ -25,3 +25,7 @@ api.jutilabs.com {
     respond 404
   }
 }
+
+frontier.jutilabs.com {
+  reverse_proxy frontier-api:8000
+}
