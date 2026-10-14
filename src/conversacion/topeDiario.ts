@@ -14,10 +14,10 @@ export function inicioDelDia(zona: string, ahora: Date = new Date()): Date {
 }
 
 /** Cuántos mensajes envió el bot en esta conversación desde `desde`. */
-export async function contarMensajesDelBot(conversacionId: string, desde: Date): Promise<number> {
+export async function contarMensajesDelBot(clienteId: string, conversacionId: string, desde: Date): Promise<number> {
   const { count, error } = await supabase.from('mensajes')
     .select('id', { count: 'exact', head: true })
-    .eq('conversacion_id', conversacionId).eq('rol', 'bot')
+    .eq('cliente_id', clienteId).eq('conversacion_id', conversacionId).eq('rol', 'bot')
     .gte('created_at', desde.toISOString());
   if (error) throw new Error(`Error contando mensajes del bot: ${error.message}`);
   return count ?? 0;
@@ -29,7 +29,7 @@ export async function contarMensajesDelBot(conversacionId: string, desde: Date):
  */
 export async function llegoAlTope(cfg: ClienteConfig, conversacionId: string, ahora: Date = new Date()): Promise<boolean> {
   try {
-    const n = await contarMensajesDelBot(conversacionId, inicioDelDia(cfg.zonaHoraria, ahora));
+    const n = await contarMensajesDelBot(cfg.id, conversacionId, inicioDelDia(cfg.zonaHoraria, ahora));
     return n >= cfg.limiteMensajesDiaConversacion;
   } catch (e) {
     console.error(`TOPE DIARIO: no se pudo contar conv=${conversacionId}, se responde igual:`, e instanceof Error ? e.message : e);

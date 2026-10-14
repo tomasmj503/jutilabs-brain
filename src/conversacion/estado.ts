@@ -24,7 +24,8 @@ export const guardarIdioma = (cfg: ClienteConfig, conversationId: number, idioma
 /** Si el bot está pausado y ya pasaron las horas, lo reactiva. Solo consulta la base cuando está pausado. */
 export async function aplicarReactivacion(cfg: ClienteConfig, ctx: ContextoConversacion): Promise<ContextoConversacion> {
   if (ctx.estadoBot !== 'pausado') return ctx;
-  const { data, error } = await supabase.from('conversaciones').select('escalado_at').eq('id', ctx.id).maybeSingle();
+  const { data, error } = await supabase.from('conversaciones').select('escalado_at')
+    .eq('cliente_id', cfg.id).eq('id', ctx.id).maybeSingle();
   if (error) throw new Error(`Error leyendo la pausa: ${error.message}`);
   const desde = (data as { escalado_at: string | null } | null)?.escalado_at ?? null;
   if (!debeReactivar(desde, cfg.reactivacionHoras)) return ctx;
@@ -33,16 +34,17 @@ export async function aplicarReactivacion(cfg: ClienteConfig, ctx: ContextoConve
 }
 
 /** Estado actual en la base. Se revisa justo antes de enviar, por si una persona tomó la conversación. */
-export async function estaPausado(conversacionId: string): Promise<boolean> {
-  const { data, error } = await supabase.from('conversaciones').select('estado_bot').eq('id', conversacionId).maybeSingle();
+export async function estaPausado(cfg: ClienteConfig, conversacionId: string): Promise<boolean> {
+  const { data, error } = await supabase.from('conversaciones').select('estado_bot')
+    .eq('cliente_id', cfg.id).eq('id', conversacionId).maybeSingle();
   if (error) throw new Error(`Error leyendo el estado del bot: ${error.message}`);
   return (data as { estado_bot?: string } | null)?.estado_bot === 'pausado';
 }
 
 /** Cuándo y por qué quedó pausado el bot (sirve para distinguir su propia pausa de la de una persona). */
-export async function leerPausa(conversacionId: string): Promise<{ escaladoAt: string | null; motivo: string | null }> {
+export async function leerPausa(cfg: ClienteConfig, conversacionId: string): Promise<{ escaladoAt: string | null; motivo: string | null }> {
   const { data, error } = await supabase.from('conversaciones')
-    .select('escalado_at, motivo_escalamiento').eq('id', conversacionId).maybeSingle();
+    .select('escalado_at, motivo_escalamiento').eq('cliente_id', cfg.id).eq('id', conversacionId).maybeSingle();
   if (error) throw new Error(`Error leyendo la pausa: ${error.message}`);
   const f = data as { escalado_at: string | null; motivo_escalamiento: string | null } | null;
   return { escaladoAt: f?.escalado_at ?? null, motivo: f?.motivo_escalamiento ?? null };

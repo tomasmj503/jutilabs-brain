@@ -133,7 +133,7 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   const saludo = esSoloSaludo(texto) ? saludoFijo(cfg, conv.idioma) : null;
   const resp = saludo ? null : await responderConModelo(cfg, conv, texto, esSoloSaludo(texto));
   // Justo antes de enviar: si una persona tomó la conversación mientras tanto, no se le pisa.
-  if (await estaPausado(conv.id)) {
+  if (await estaPausado(cfg, conv.id)) {
     console.log(`NO SE ENVÍA conv=${conv.chatwootConversationId} motivo=una persona tomó la conversación`);
     return;
   }
@@ -211,7 +211,7 @@ async function atenderMedia(cfg: ClienteConfig, conv: ContextoConversacion, tipo
 /** Bot pausado: avisa al huésped UNA vez por pausa. Si falla, solo se registra (nunca dispara otro escalamiento). */
 async function acusarSiCorresponde(cfg: ClienteConfig, conv: ContextoConversacion, turno: TurnoEntrante): Promise<void> {
   try {
-    if (!(await debeAcusar(conv.id))) return;
+    if (!(await debeAcusar(cfg, conv.id))) return;
     const idioma = detectarIdioma(turno.textoAgrupado, conv.idioma, cfg.idiomas);
     await enviarYGuardar(cfg, { ...conv, idioma }, textoFijo(cfg, 'mensajeAcuse', idioma), { origen: 'acuse' });
   } catch (e) {
