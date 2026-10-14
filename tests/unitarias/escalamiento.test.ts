@@ -104,6 +104,30 @@ describe('responderYEscalar', () => {
   });
 });
 
+describe('PC-10: la pausa falla', () => {
+  it('alerta «NO SE PUDO PAUSAR» al equipo (nota + celular) y aun así completa el aviso al huésped', async () => {
+    pausarBotMock.mockRejectedValue(new Error('Supabase caído'));
+    enviarMensajeMock.mockResolvedValueOnce(77);
+    const r = await responderYEscalar(cfg, 9, 'es', 'quiero una persona', 'pidio_humano');
+    expect(pausarBotMock).toHaveBeenCalledTimes(2); // un reintento
+    expect(notas().some((n) => n.includes('NO SE PUDO PAUSAR'))).toBe(true);
+    expect(avisarAlCelularMock).toHaveBeenCalledWith(cfg, 9, expect.stringContaining('NO SE PUDO PAUSAR'));
+    expect(r).toMatchObject({ mensajeId: 77, avisado: true });
+  });
+
+  it('si la alerta de la pausa tampoco sale, queda pendiente CON la pausa por completar', async () => {
+    pausarBotMock.mockRejectedValue(new Error('Supabase caído'));
+    enviarMensajeMock.mockResolvedValueOnce(77);
+    avisarAlCelularMock
+      .mockResolvedValueOnce('enviado') // el aviso de la escalación
+      .mockResolvedValueOnce('fallido'); // la alerta «no se pudo pausar»
+    enviarNotaPrivadaMock.mockResolvedValueOnce(undefined) // nota de la escalación
+      .mockRejectedValue(new Error('Chatwoot 500')); // y luego Chatwoot cae
+    await responderYEscalar(cfg, 9, 'es', 'hola', 'no_se_el_dato');
+    expect(registrarAvisoPendienteMock).toHaveBeenCalledWith(cfg, 9, expect.objectContaining({ pausar: true, motivo: 'no_se_el_dato' }));
+  });
+});
+
 describe('alertarEnvioIncierto', () => {
   it('avisa al equipo y pausa, SIN mandar ningún mensaje al huésped', async () => {
     expect(await alertarEnvioIncierto(cfg, 9, 'quiero reservar')).toBe(true);

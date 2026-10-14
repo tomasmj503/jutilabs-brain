@@ -18,6 +18,25 @@ export type ResultadoEscalamiento = {
   avisado: boolean;
 };
 
+/**
+ * Pausa el bot. PC-10: si la pausa falla (después de un reintento) el bot puede seguir hablando encima de una persona
+ * sin que nadie lo sepa, así que se avisa al equipo con una alerta propia y, si ni eso sale, queda pendiente
+ * (el barrido reintenta la pausa cuando el aviso por fin se confirme).
+ */
+export async function pausarOAlertar(cfg: ClienteConfig, conversationId: number, motivo: string): Promise<boolean> {
+  const ok = await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
+  if (ok) return true;
+  const nota = `🚨 NO SE PUDO PAUSAR el bot en esta conversación (${motivo}). Puede seguir contestándole al huésped aunque `
+    + 'una persona lo esté atendiendo: revisa la conversación y avisa al equipo técnico.';
+  const alerta = await alertarAlEquipo(cfg, conversationId, nota);
+  if (!alerta.avisado) {
+    await registrarAvisoPendiente(cfg, conversationId, {
+      nota, motivo, pausar: true, textoHuesped: null, idioma: cfg.idiomaDefault, notaCreada: alerta.nota,
+    });
+  }
+  return false;
+}
+
 const AVISO_EQUIPO = {
   fallo: '⚠️ El aviso al huésped NO salió (falla de red): escríbele tú.',
   incierto: '⚠️ No se pudo confirmar si el aviso llegó al huésped: revisa la conversación antes de escribirle.',
@@ -46,7 +65,7 @@ export async function responderYEscalar(
     });
     return { texto, mensajeId: null, envio: 'no_enviado', avisado: false };
   }
-  await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
+  await pausarOAlertar(cfg, conversationId, motivo);
   let mensajeId: number | null = null;
   let envio: ResultadoEscalamiento['envio'] = 'enviado';
   try {
@@ -78,7 +97,7 @@ export async function alertarEnvioIncierto(cfg: ClienteConfig, conversationId: n
     });
     return false;
   }
-  await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, 'error_interno'));
+  await pausarOAlertar(cfg, conversationId, 'error_interno');
   return true;
 }
 
@@ -101,7 +120,7 @@ export async function avisarEquipoYPausar(
     });
     return false;
   }
-  await conUnReintento('pausar', conversationId, () => pausarBot(cfg, conversationId, motivo));
+  await pausarOAlertar(cfg, conversationId, motivo);
   return true;
 }
 
