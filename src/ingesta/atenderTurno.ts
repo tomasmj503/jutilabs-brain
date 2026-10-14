@@ -10,7 +10,7 @@ import { EnvioIncierto } from '../salida/errores.js';
 import { herramientas } from '../llm/herramientas/index.js';
 import { rutear } from '../router/index.js';
 import { detectarIdioma, esSoloSaludo } from '../router/texto.js';
-import { aplicarReactivacion, estaPausado, guardarIdioma } from '../conversacion/estado.js';
+import { estaPausado, guardarIdioma } from '../conversacion/estado.js';
 import { llegoAlTope } from '../conversacion/topeDiario.js';
 import { esRepeticion } from './repeticion.js';
 import { textoFijo } from './textosFijos.js';
@@ -79,7 +79,7 @@ export type ResultadoTurno = { atendido: boolean };
 const ATENDIDO: ResultadoTurno = { atendido: true };
 
 /**
- * Carga la conversación ANTES de guardar lo nuevo, aplica la reactivación, guarda lo que escribió
+ * Carga la conversación ANTES de guardar lo nuevo, guarda lo que escribió
  * el huésped y consulta al router. Devuelve null si el bot no debe responder nada.
  * Si el router dice "escalar" (tema de alto valor), el turno SIGUE: el modelo responde con la
  * info real y, después de enviarla, se avisa al equipo y se pausa (ver atenderTurno).
@@ -93,7 +93,7 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
   };
   // Los mensajes de este turno ya se guardaron al llegar (bandeja durable): no van al historial del modelo.
   const idsDelTurno = turno.mensajes.map((m) => m.chatwootMessageId).filter((id) => id > 0);
-  let conv = await aplicarReactivacion(cfg, await obtenerContexto(cfg, datos, idsDelTurno));
+  let conv = await obtenerContexto(cfg, datos, idsDelTurno);
   for (const m of turno.mensajes) {
     await guardarMensaje(cfg, {
       conversacionId: conv.id, chatwootMessageId: m.chatwootMessageId || null, rol: 'huesped',

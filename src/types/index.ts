@@ -50,6 +50,7 @@ export interface ClienteConfig {
   llmTemperatura: number;
   openrouterKeyRef: string; // nombre de la variable de entorno, NO la clave
   limiteMensajesDiaConversacion: number;
+  /** SIN USO desde la Fase 1 (D-08): el bot ya no vuelve por tiempo, solo con la nota «#max». Se conserva por la columna. */
   reactivacionHoras: number;
   linkReservaBase: string | null; // motor FDM con hostelId, sin fechas
   configExtra: Record<string, unknown>;

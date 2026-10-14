@@ -22,8 +22,7 @@ const cfg = { id: 'c1' } as never;
 describe('estado: sin reactivación por tiempo', () => {
   beforeEach(() => { actualizaciones.length = 0; });
 
-  // Pendiente #2: hoy existen debeReactivar y aplicarReactivacion. Al arreglarlo este `it.fails` pasa a `it`.
-  it.fails('el módulo no ofrece ninguna reactivación por tiempo', () => {
+  it('el módulo no ofrece ninguna reactivación por tiempo', () => {
     expect(estado).not.toHaveProperty('debeReactivar');
     expect(estado).not.toHaveProperty('aplicarReactivacion');
   });

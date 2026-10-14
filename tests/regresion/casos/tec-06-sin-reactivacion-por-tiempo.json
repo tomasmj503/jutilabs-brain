@@ -1,7 +1,6 @@
 {
   "id": "tec-06",
   "ref": "#2 / PC-11 / D-08",
-  "pendiente": "#2",
   "descripcion": "pausado hace 6 h (y con fecha nula) sigue pausado: no hay modelo ni respuesta",
   "conversacion": {
     "estadoBot": "pausado",

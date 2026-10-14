@@ -7,6 +7,7 @@ import { enmascararSensibles } from '../seguridad/enmascarar.js';
 import { leerAviso, type Aviso } from './aviso.js';
 import { procesarEntrante } from './procesarEntrante.js';
 import { procesarSaliente } from './procesarSaliente.js';
+import { esComandoLiberar, procesarLiberacion } from './liberacion.js';
 import { registrarEnCurso } from './enCurso.js';
 import { procesarActualizacion } from './revisarFallo.js';
 import { esEntranteGuardable, guardarEntranteDurable, recibirConBotApagado } from './bandeja.js';
@@ -52,7 +53,11 @@ async function despachar(a: Aviso & { accountId: number }, cfgDeLaRuta: ClienteC
   if (a.evento === 'message_updated') return procesarActualizacion(cfg, a); // ¿Meta rechazó un mensaje?
   // Las respuestas del equipo se registran SIEMPRE (pausan el bot), aunque el bot esté apagado:
   // así, al volver a prenderlo, no le contesta encima a una persona que estaba atendiendo.
-  if (a.direccion === 'saliente') return procesarSaliente(cfg, a);
+  if (a.direccion === 'saliente') {
+    // D-08: la nota privada «#max» de una persona devuelve el chat a Max; es lo ÚNICO que lo libera.
+    if (esComandoLiberar(a)) return procesarLiberacion(cfg, a);
+    return procesarSaliente(cfg, a);
+  }
   if (a.direccion !== 'entrante') return;
   // Kill-switch (bot_activo = false): el bot no atiende al huésped, pero su mensaje se guarda y la conversación se abre
   // para el equipo (#18). Antes se descartaba sin dejar rastro.

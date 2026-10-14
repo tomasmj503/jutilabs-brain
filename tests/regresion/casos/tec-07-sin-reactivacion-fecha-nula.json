@@ -1,7 +1,6 @@
 {
   "id": "tec-07",
   "ref": "#2 / PC-11",
-  "pendiente": "#2",
   "descripcion": "pausado sin fecha de pausa tampoco se reactiva solo",
   "conversacion": {
     "estadoBot": "pausado",
