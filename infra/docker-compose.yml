@@ -48,6 +48,34 @@ services:
       timeout: 5s
       retries: 10
 
+  # Redis PROPIO del cerebro (ADR-17 / V-31): candados, buffer y dedup. Antes compartía instancia con Chatwoot
+  # (un FLUSHDB o una cola de Sidekiq atascada lo tumbaba) y no tenía límite de memoria.
+  #  - maxmemory 256mb: el cerebro guarda claves pequeñas con vencimiento; ajustar con `INFO memory` (S-13).
+  #  - noeviction: si se llena, las escrituras FALLAN en vez de expulsar candados. La bandeja durable (mensajes.atendido_at)
+  #    cubre esa falla: ningún mensaje se pierde sin aviso.
+  redis-brain:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --requirepass
+      - ${BRAIN_REDIS_PASSWORD}
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_brain_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PW ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    environment:
+      REDIS_PW: ${BRAIN_REDIS_PASSWORD}
+
   chatwoot-rails:
     image: chatwoot/chatwoot:${CHATWOOT_VERSION}
     restart: unless-stopped
@@ -105,7 +133,9 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    image: jutilabs/brain:local
+    # Etiqueta por commit (V-30): BRAIN_TAG=<sha7> en infra/.env. Para volver atrás se pone la etiqueta anterior y
+    # `docker compose up -d brain` (ver infra/README.md, «Desplegar y volver atrás»).
+    image: jutilabs/brain:${BRAIN_TAG:-local}
     restart: unless-stopped
     # Cierre ordenado: al apagar, el cerebro espera hasta TOPE_APAGADO_MS (src/apagado.ts, 120 s) a que
     # terminen los turnos en curso. Este tiempo debe ser MAYOR; si no, Docker lo corta antes (SIGKILL).
@@ -114,9 +144,10 @@ services:
     environment:
       NODE_ENV: production
       PORT: 8080
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      # Redis propio del cerebro (no el de Chatwoot).
+      REDIS_URL: redis://:${BRAIN_REDIS_PASSWORD}@redis-brain:6379
     depends_on:
-      redis:
+      redis-brain:
         condition: service_healthy
 
 volumes:
@@ -124,5 +155,6 @@ volumes:
   caddy_config:
   postgres_data:
   redis_data:
+  redis_brain_data:
   chatwoot_storage:
   n8n_data:
