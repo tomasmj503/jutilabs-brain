@@ -9,7 +9,7 @@ vi.mock('../../src/config/cliente.js', () => ({
   cargarClientePorSlug: async () => null,
 }));
 vi.mock('../../src/salida/alertaEquipo.js', () => ({ alertarAlEquipo: alertar }));
-vi.mock('../../src/ingesta/bandeja.js', () => ({ esEntranteGuardable: () => false, guardarEntranteDurable: vi.fn() }));
+vi.mock('../../src/ingesta/bandeja.js', () => ({ esEntranteGuardable: () => false, guardarEntranteDurable: vi.fn(), recibirConBotApagado: vi.fn() }));
 const entrante = vi.fn();
 vi.mock('../../src/ingesta/procesarEntrante.js', () => ({ procesarEntrante: entrante }));
 vi.mock('../../src/ingesta/procesarSaliente.js', () => ({ procesarSaliente: vi.fn() }));

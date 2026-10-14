@@ -27,7 +27,7 @@ vi.mock('../../src/config/cliente.js', () => ({
 const entrante = vi.fn();
 vi.mock('../../src/ingesta/procesarEntrante.js', () => ({ procesarEntrante: entrante }));
 vi.mock('../../src/ingesta/procesarSaliente.js', () => ({ procesarSaliente: vi.fn() }));
-vi.mock('../../src/ingesta/bandeja.js', () => ({ esEntranteGuardable: () => false, guardarEntranteDurable: vi.fn() }));
+vi.mock('../../src/ingesta/bandeja.js', () => ({ esEntranteGuardable: () => false, guardarEntranteDurable: vi.fn(), recibirConBotApagado: vi.fn() }));
 vi.mock('../../src/ingesta/revisarFallo.js', () => ({ procesarActualizacion: vi.fn() }));
 
 const { registrarWebhookChatwoot } = await import('../../src/ingesta/webhook.js');

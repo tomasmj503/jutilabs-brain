@@ -4,12 +4,14 @@ import Fastify from 'fastify';
 // PC-13: el mensaje del huésped se guarda ANTES de responder 200 (y si guardar falla, igual se responde 200).
 const orden: string[] = [];
 vi.mock('../../src/config/env.js', () => ({ env: { CHATWOOT_WEBHOOK_SECRET: 's3' } }));
+let botActivo = true;
+const apagado = vi.fn();
 vi.mock('../../src/config/cliente.js', () => ({
-  cargarClientePorChatwootAccount: async () => ({ id: 'c1', activo: true, botActivo: true }),
+  cargarClientePorChatwootAccount: async () => ({ id: 'c1', activo: true, botActivo }),
   cargarClientePorSlug: async () => null,
 }));
 const guardar = vi.fn();
-vi.mock('../../src/ingesta/bandeja.js', () => ({ esEntranteGuardable: () => true, guardarEntranteDurable: guardar }));
+vi.mock('../../src/ingesta/bandeja.js', () => ({ esEntranteGuardable: () => true, guardarEntranteDurable: guardar, recibirConBotApagado: apagado }));
 vi.mock('../../src/ingesta/procesarEntrante.js', () => ({ procesarEntrante: async () => { orden.push('procesar'); } }));
 vi.mock('../../src/ingesta/procesarSaliente.js', () => ({ procesarSaliente: vi.fn() }));
 vi.mock('../../src/ingesta/revisarFallo.js', () => ({ procesarActualizacion: vi.fn() }));
@@ -33,6 +35,8 @@ async function enviar(): Promise<number> {
 
 beforeEach(() => {
   orden.length = 0;
+  botActivo = true;
+  apagado.mockReset();
   guardar.mockReset();
   vi.spyOn(console, 'log').mockImplementation(() => undefined);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -44,6 +48,15 @@ describe('webhook: bandeja durable', () => {
     guardar.mockImplementation(async () => { orden.push('guardado'); });
     expect(await enviar()).toBe(200);
     expect(orden).toEqual(['guardado', 'procesar']);
+  });
+
+  it('bot apagado: el mensaje nace atendido en el guardado previo y se abre la conversación (no se procesa con el modelo)', async () => {
+    botActivo = false;
+    guardar.mockResolvedValue(undefined);
+    expect(await enviar()).toBe(200);
+    expect(guardar).toHaveBeenCalledWith(expect.objectContaining({ botActivo: false }), expect.anything(), true);
+    expect(apagado).toHaveBeenCalledTimes(1);
+    expect(orden).not.toContain('procesar');
   });
 
   it('si guardar falla igual responde 200 (Chatwoot no debe reintentar) y el procesamiento sigue', async () => {

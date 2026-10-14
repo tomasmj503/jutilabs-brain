@@ -9,7 +9,7 @@ import { procesarEntrante } from './procesarEntrante.js';
 import { procesarSaliente } from './procesarSaliente.js';
 import { registrarEnCurso } from './enCurso.js';
 import { procesarActualizacion } from './revisarFallo.js';
-import { esEntranteGuardable, guardarEntranteDurable } from './bandeja.js';
+import { esEntranteGuardable, guardarEntranteDurable, recibirConBotApagado } from './bandeja.js';
 import { alertarAlEquipo } from '../salida/alertaEquipo.js';
 
 /**
@@ -53,8 +53,11 @@ async function despachar(a: Aviso & { accountId: number }, cfgDeLaRuta: ClienteC
   // Las respuestas del equipo se registran SIEMPRE (pausan el bot), aunque el bot esté apagado:
   // así, al volver a prenderlo, no le contesta encima a una persona que estaba atendiendo.
   if (a.direccion === 'saliente') return procesarSaliente(cfg, a);
-  // Kill-switch (bot_activo = false): el bot no atiende al huésped.
-  if (a.direccion === 'entrante' && cfg.botActivo) await procesarEntrante(cfg, a);
+  if (a.direccion !== 'entrante') return;
+  // Kill-switch (bot_activo = false): el bot no atiende al huésped, pero su mensaje se guarda y la conversación se abre
+  // para el equipo (#18). Antes se descartaba sin dejar rastro.
+  if (cfg.botActivo) await procesarEntrante(cfg, a);
+  else await recibirConBotApagado(cfg, a);
 }
 
 /** Tope para el guardado previo al 200: si Supabase tarda más, se responde igual (el camino asíncrono lo guarda). */
@@ -73,7 +76,7 @@ async function guardarAntesDelOk(aviso: Aviso, cfgDeLaRuta: ClienteConfig | null
     const tope = new Promise<void>((resolver) => {
       reloj = setTimeout(resolver, TOPE_GUARDADO_ANTES_DEL_200_MS);
     });
-    await Promise.race([guardarEntranteDurable(cfg, aviso), tope]);
+    await Promise.race([guardarEntranteDurable(cfg, aviso, !cfg.botActivo), tope]);
     clearTimeout(reloj);
   } catch (e) {
     console.error(`BANDEJA: no se pudo guardar antes del 200 conv=${aviso.conversationId} mensaje=${aviso.messageId}:`, e instanceof Error ? e.message : e);

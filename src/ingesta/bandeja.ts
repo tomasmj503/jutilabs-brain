@@ -1,7 +1,7 @@
 import { supabase } from '../db/supabase.js';
 import { cargarClientesActivos } from '../config/cliente.js';
 import type { ClienteConfig, MensajeEntrante, TipoMensaje, TurnoEntrante } from '../types/index.js';
-import { asegurarConversacion, guardarMensaje } from '../conversacion/almacen.js';
+import { asegurarConversacion, guardarMensaje, marcarAtendidos } from '../conversacion/almacen.js';
 import { pausarBot } from '../conversacion/estado.js';
 import {
   actualizarAvisoPendiente, leerAvisosPendientes, limpiarAvisoPendiente, registrarAvisoPendiente, type EntradaPendiente,
@@ -59,6 +59,29 @@ export async function guardarEntranteDurable(cfg: ClienteConfig, a: Aviso, atend
     contenido: enmascararSensibles(a.contenido) || `[${tipo}]`,
     ...(atendido ? { atendidoAt: new Date().toISOString() } : {}),
   });
+}
+
+/**
+ * #18 / PC-23: bot apagado (kill-switch). El bot NO responde, pero el huésped no puede quedar invisible: el mensaje se
+ * guarda (ya atendido, para que al volver a prender el bot el barrido no conteste historia vieja) y la conversación se
+ * abre para que el equipo la vea en su bandeja.
+ */
+export async function recibirConBotApagado(cfg: ClienteConfig, a: Aviso): Promise<void> {
+  if (!esEntranteGuardable(a) || a.conversationId === null) return;
+  try {
+    await guardarEntranteDurable(cfg, a, true);
+    // Si el guardado previo al 200 ya lo había insertado sin atender, el insert de arriba fue un duplicado: se marca.
+    if (a.messageId !== null) await marcarAtendidos(cfg, [a.messageId]);
+  } catch (e) {
+    console.error(`BOT APAGADO: no se pudo guardar el mensaje conv=${a.conversationId}:`, e instanceof Error ? e.message : e);
+  }
+  try {
+    await marcarAbierta(cfg, a.conversationId);
+  } catch (e) {
+    console.error(`BOT APAGADO: no se pudo abrir la conversación conv=${a.conversationId}:`, e instanceof Error ? e.message : e);
+    await avisarAlCelular(cfg, a.conversationId,
+      '⚠️ Mensaje de un huésped con el bot apagado (bot apagado) y no se pudo abrir la conversación en Chatwoot: revísala, nadie le responderá.');
+  }
 }
 
 type FilaPendiente = { id: string; conversacion_id: string; chatwoot_message_id: number | null; contenido: string | null; tipo: string; created_at: string };
