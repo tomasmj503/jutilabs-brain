@@ -35,6 +35,8 @@ export interface ClienteConfig {
   botActivo: boolean; // kill-switch
   chatwootAccountId: number;
   chatwootTokenRef: string; // nombre de la variable de entorno
+  /** Nombre de la variable de entorno con el secreto del webhook de ESTE cliente (≥ 32 caracteres). null = aún sin configurar. */
+  chatwootWebhookSecretRef: string | null;
   idiomas: Idioma[];
   idiomaDefault: Idioma;
   zonaHoraria: string;
