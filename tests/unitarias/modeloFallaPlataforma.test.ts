@@ -68,7 +68,7 @@ describe('el modelo responde con falla de plataforma', () => {
 
   it('otros errores (p. ej. un 500 que ya probó el respaldo) siguen escalando como antes', async () => {
     llm.mockRejectedValue(http(500));
-    await atenderTurno(cfg, turno('hola'));
+    await atenderTurno(cfg, turno('¿a qué hora es el check-in?'));
     expect(pausarBot).toHaveBeenCalledWith(cfg, 7, 'error_interno');
   });
 });

@@ -28,10 +28,15 @@ type Mensajes = Parameters<typeof llamarLLMConReintento>[0];
 type Extra = Partial<Pick<MensajeAGuardar,
   'origen' | 'modelo' | 'tokensEntrada' | 'tokensSalida' | 'latenciaMs' | 'herramientas'>>;
 
-export function saludoFijo(cfg: ClienteConfig, idioma: string): string | null {
+/**
+ * Saludo fijo. Primero el de la base (config_extra.saludo, en el idioma o en el idioma por defecto del cliente);
+ * si no hay, el del manual (textosFijos.ts). Nunca devuelve null: un saludo solo no necesita al modelo.
+ */
+export function saludoFijo(cfg: ClienteConfig, idioma: string): string {
   const s = cfg.configExtra.saludo as Record<string, unknown> | null | undefined;
   const texto = s?.[idioma] ?? s?.[cfg.idiomaDefault];
-  return typeof texto === 'string' && texto.trim() ? texto : null;
+  if (typeof texto === 'string' && texto.trim()) return texto;
+  return textoFijo(cfg, 'saludo', idioma);
 }
 
 export function armarMensajes(cfg: ClienteConfig, conv: ContextoConversacion, texto: string, esSaludo = false): Mensajes {
