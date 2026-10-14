@@ -4,7 +4,7 @@ import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
 import { avisarAlCelular } from '../salida/avisoEquipo.js';
-import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar, avisarTema } from '../salida/escalamiento.js';
+import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar, avisarTema, avisarRespuestaParcial } from '../salida/escalamiento.js';
 import { debeAvisarTema } from './avisoTema.js';
 import { avisoPorRedDeSeguridad, motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
 import { EnvioIncierto } from '../salida/errores.js';
@@ -166,12 +166,14 @@ async function avisarAdjuntoConTexto(cfg: ClienteConfig, conv: ContextoConversac
  */
 async function avisarAlFinal(
   cfg: ClienteConfig, conv: ContextoConversacion, texto: string, tema: string | null,
-  herramientasUsadas: readonly string[], textoEnviado?: string,
+  herramientasUsadas: readonly string[], textoEnviado?: string, respuestaParcial = false,
 ): Promise<void> {
   const motivoPausa = motivoParaAvisarAlEquipo(null, herramientasUsadas, textoEnviado);
   try {
     if (motivoPausa) {
       await avisarEquipoYPausar(cfg, conv.chatwootConversationId, motivoPausa, texto);
+    } else if (respuestaParcial && (await debeAvisarTema(conv.id, 'sin_dato_completo'))) {
+      await avisarRespuestaParcial(cfg, conv.chatwootConversationId, texto);
     } else if (tema && (await debeAvisarTema(conv.id, tema))) {
       await avisarTema(cfg, conv.chatwootConversationId, tema, texto);
     }
@@ -200,7 +202,9 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   }
   // Si falló del todo o el modelo no sabía el dato: ya escala con su propio motivo. No se duplica el aviso.
   if (!resp) return { atendido: await escalarYGuardar(cfg, conv, texto, 'error_interno') };
-  if (resp.noSeElDato) return { atendido: await escalarYGuardar(cfg, conv, texto, 'no_se_el_dato') };
+  // Marca SIN texto: no hay nada que decirle al huésped → aviso fijo, aviso al equipo y pausa (como siempre).
+  // Marca CON texto: el modelo sí respondió; el texto se envía y solo se avisa al equipo (abajo). #10 / V-17.
+  if (resp.noSeElDato && !resp.texto) return { atendido: await escalarYGuardar(cfg, conv, texto, 'no_se_el_dato') };
   if (!resp.texto) return ATENDIDO;
   if (esRepeticion(conv, resp.texto, texto)) {
     console.log(`REPETICIÓN EVITADA conv=${conv.chatwootConversationId}`);
@@ -216,7 +220,7 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   if (avisoPorRedDeSeguridad(null, resp.herramientasUsadas, resp.texto)) {
     console.log(`RED DE SEGURIDAD conv=${conv.chatwootConversationId} promesa="${enmascararSensibles(resp.texto).replace(/\s+/g, ' ').slice(0, 200)}"`);
   }
-  await avisarAlFinal(cfg, conv, texto, tema, resp.herramientasUsadas, resp.texto);
+  await avisarAlFinal(cfg, conv, texto, tema, resp.herramientasUsadas, resp.texto, resp.noSeElDato);
   return ATENDIDO;
 }
 

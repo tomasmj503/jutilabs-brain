@@ -152,11 +152,24 @@ export async function avisarMensajeFallido(
  * sin escribirle nada al huésped. Si el aviso no se confirma queda pendiente. Devuelve true si el equipo quedó avisado.
  */
 export async function avisarTema(cfg: ClienteConfig, conversationId: number, tema: string, pregunta: string): Promise<boolean> {
-  const nota = `⭐ Tema de interés detectado (${tema}): el bot sigue atendiendo; revisa si hace falta dar seguimiento.\nMensaje del huésped: "${pregunta.slice(0, 300)}"`;
+  return avisarSinPausar(cfg, conversationId, 'tema',
+    `⭐ Tema de interés detectado (${tema}): el bot sigue atendiendo; revisa si hace falta dar seguimiento.\nMensaje del huésped: "${pregunta.slice(0, 300)}"`);
+}
+
+/**
+ * El modelo respondió pero marcó que no tenía todos los datos ([[NO_SE]] con texto). Su texto SÍ salió; se avisa al
+ * equipo para que lo complete, sin pausar (#10 / V-17).
+ */
+export async function avisarRespuestaParcial(cfg: ClienteConfig, conversationId: number, pregunta: string): Promise<boolean> {
+  return avisarSinPausar(cfg, conversationId, 'respuesta_parcial',
+    `ℹ️ El bot respondió, pero marcó que NO tenía todos los datos: revisa si la respuesta fue suficiente y complétala.\nMensaje del huésped: "${pregunta.slice(0, 300)}"`);
+}
+
+async function avisarSinPausar(cfg: ClienteConfig, conversationId: number, motivo: string, nota: string): Promise<boolean> {
   const alerta = await alertarAlEquipo(cfg, conversationId, nota);
   if (!alerta.avisado) {
     await registrarAvisoPendiente(cfg, conversationId, {
-      nota, motivo: 'tema', pausar: false, textoHuesped: null, idioma: cfg.idiomaDefault, notaCreada: alerta.nota,
+      nota, motivo, pausar: false, textoHuesped: null, idioma: cfg.idiomaDefault, notaCreada: alerta.nota,
     });
   }
   return alerta.avisado;

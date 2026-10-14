@@ -21,7 +21,7 @@ export const generarLinkReserva: HerramientaLLM<{ llegada?: string; noches?: num
   },
   async ejecutar(args, ctx) {
     const base = ctx.cfg.linkReservaBase;
-    if (!base) return { error: 'No hay link de reserva configurado. Pasa la consulta al equipo con [[NO_SE]].' };
+    if (!base) return { error: 'No hay link de reserva configurado. No inventes ningún link: dile al huésped que una persona del equipo le ayudará con la reserva.' };
     const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: ctx.cfg.zonaHoraria }).format(new Date());
     if (args.llegada !== undefined && (!fechaReal(args.llegada) || args.llegada < hoy)) return { error: `Fecha inválida o pasada (hoy es ${hoy}). Pide una fecha futura.` };
     if (args.noches !== undefined && !entre(args.noches, 1, 30)) return { error: 'Noches inválidas (1 a 30). Pregunta de nuevo.' };
