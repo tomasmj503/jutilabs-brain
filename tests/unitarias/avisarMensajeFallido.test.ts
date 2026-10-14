@@ -61,4 +61,11 @@ describe('avisarMensajeFallido', () => {
     await avisarMensajeFallido(cfg, 7, { error: null, contenido: 'x' });
     expect(registrarAvisoPendienteMock).not.toHaveBeenCalled();
   });
+  it('#12: si lo escribió una PERSONA, la nota lo dice, NO abre la conversación (no se la toca) y no ofrece «Reintentar»', async () => {
+    await avisarMensajeFallido(cfg, 7, { error: '131047: Re-engagement message', contenido: 'Hola', deLaPersona: true });
+    expect(nota()).toContain('persona del equipo');
+    expect(nota()).toContain('131047: Re-engagement message');
+    expect(marcarAbiertaMock).not.toHaveBeenCalled();
+    expect(enviarMensajeMock).not.toHaveBeenCalled();
+  });
 });

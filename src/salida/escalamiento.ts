@@ -131,12 +131,20 @@ export async function avisarEquipoYPausar(
  * Si la nota no se puede dejar, LANZA el error: quien llama deshace la marca de "ya avisado" para reintentar luego.
  */
 export async function avisarMensajeFallido(
-  cfg: ClienteConfig, conversationId: number, fallo: { error: string | null; contenido: string },
+  cfg: ClienteConfig, conversationId: number,
+  fallo: { error: string | null; contenido: string; /** Lo escribió una persona del equipo, no el bot. */ deLaPersona?: boolean },
 ): Promise<void> {
   const motivo = fallo.error ?? 'Meta no informó el motivo';
-  const nota = `⚠️ Un mensaje NO llegó al huésped: WhatsApp (Meta) lo rechazó después de aceptarlo.\nMotivo que informa Meta: ${motivo}\nMensaje: "${fallo.contenido.slice(0, 300)}"\nQué hacer: revisa la conversación y, si hace falta, contacta al huésped por otro medio. Ojo: el botón "Reintentar" de Chatwoot puede marcarlo como enviado sin reenviarlo; si lo usas, confirma que sí llegó.`;
+  const quien = fallo.deLaPersona
+    ? 'Un mensaje que escribió una persona del equipo NO llegó al huésped'
+    : 'Un mensaje NO llegó al huésped';
+  const queHacer = fallo.deLaPersona
+    ? 'Qué hacer: quien lo escribió debe contactar al huésped por otro medio. La conversación no se tocó.'
+    : 'Qué hacer: revisa la conversación y, si hace falta, contacta al huésped por otro medio. Ojo: el botón "Reintentar" de Chatwoot puede marcarlo como enviado sin reenviarlo; si lo usas, confirma que sí llegó.';
+  const nota = `⚠️ ${quien}: WhatsApp (Meta) lo rechazó después de aceptarlo.\nMotivo que informa Meta: ${motivo}\nMensaje: "${fallo.contenido.slice(0, 300)}"\n${queHacer}`;
   await enviarNotaPrivada(cfg, conversationId, nota);
-  await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
+  // Si lo escribió una persona, la conversación ya es suya: ni se abre ni se le cambia nada.
+  if (!fallo.deLaPersona) await conUnReintento('abrir', conversationId, () => marcarAbierta(cfg, conversationId));
   const celular = await avisarAlCelular(cfg, conversationId, nota);
   if (celular === 'fallido') {
     // La nota ya quedó; lo que falta es el aviso al celular. Se reintenta desde el barrido en vez de perderlo.

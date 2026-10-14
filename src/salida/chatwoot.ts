@@ -179,18 +179,50 @@ export async function enviarNotaPrivada(cfg: ClienteConfig, conversationId: numb
   }, fetchSeguro);
 }
 
+type Asignado = { tipo: 'nadie' } | { tipo: 'bot' } | { tipo: 'persona'; id: number } | { tipo: 'desconocido' };
+
 /**
- * Deja la conversación "abierta" Y SIN ASIGNAR: así todo el equipo la ve en "Unassigned".
- * ("Pendiente" significa que un bot la está atendiendo; "abierta" es la que el equipo ve por defecto.)
- * Chatwoot asigna la conversación a quien la abre (aquí el propio bot: "self-assigned"), y así quedaba
- * fuera de "Mine" y "Unassigned" de las personas del equipo. Por eso, después de abrirla se desasigna
- * con `assignee_id: 0` (verificado en Chatwoot 4.17.0). Los dos pasos se pueden repetir sin daño; si
- * el segundo falla se lanza el error para que quien llama reintente.
- * Nota: si una persona ya la tenía asignada, también se le quita la asignación (sigue visible en "All").
+ * Quién tiene asignada la conversación (GET de la conversación → meta.assignee; S-05: formato por confirmar en
+ * Chatwoot 4.17.0). Cualquier duda devuelve 'desconocido': quien llama NO debe desasignar a nadie.
+ */
+async function leerAsignado(cfg: ClienteConfig, conversationId: number): Promise<Asignado> {
+  try {
+    const base = env.CHATWOOT_BASE_URL.replace(/\/+$/, '');
+    const r = await fetchSeguro(`${base}/api/v1/accounts/${cfg.chatwootAccountId}/conversations/${conversationId}`, {
+      headers: { 'api-access-token': secretoPorRef(cfg.chatwootTokenRef) },
+    });
+    if (!r.ok) return { tipo: 'desconocido' };
+    const meta = ((await r.json()) as { meta?: { assignee?: { id?: unknown } | null } } | null)?.meta;
+    if (!meta || !('assignee' in meta)) return { tipo: 'desconocido' };
+    if (meta.assignee === null || meta.assignee === undefined) return { tipo: 'nadie' };
+    const id = meta.assignee.id;
+    if (typeof id !== 'number') return { tipo: 'desconocido' };
+    const botId = await idUsuarioBot(cfg);
+    if (botId === null) return { tipo: 'desconocido' };
+    return id === botId ? { tipo: 'bot' } : { tipo: 'persona', id };
+  } catch (e) {
+    console.error(`NO SE PUDO LEER EL ASIGNADO conv=${conversationId}:`, e instanceof Error ? e.message : e);
+    return { tipo: 'desconocido' };
+  }
+}
+
+/**
+ * Deja la conversación "abierta" para que todo el equipo la vea. Chatwoot la asigna a quien la abre (aquí el propio
+ * bot: "self-assigned"), y así quedaba fuera de "Mine" y "Unassigned" de las personas del equipo; por eso, si la tiene
+ * asignada EL BOT, después de abrirla se desasigna con `assignee_id: 0` (verificado en Chatwoot 4.17.0).
+ * #12 / PC-20: si la tiene una PERSONA, o no se puede saber, NO se toca la asignación: escalar nunca le quita la
+ * conversación a quien la está atendiendo. Si desasignar al bot falla se lanza el error para que quien llama reintente.
  */
 export async function marcarAbierta(cfg: ClienteConfig, conversationId: number): Promise<void> {
   await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: 'open' }, fetchSeguro);
-  await llamarChatwoot(cfg, conversationId, 'assignments', { assignee_id: 0 }, fetchSeguro);
+  const asignado = await leerAsignado(cfg, conversationId);
+  if (asignado.tipo === 'bot') {
+    await llamarChatwoot(cfg, conversationId, 'assignments', { assignee_id: 0 }, fetchSeguro);
+  } else if (asignado.tipo === 'persona') {
+    console.log(`ASIGNACIÓN RESPETADA conv=${conversationId}: la tiene la persona ${asignado.id}, no se desasigna`);
+  } else if (asignado.tipo === 'desconocido') {
+    console.warn(`ASIGNACIÓN SIN VERIFICAR conv=${conversationId}: no se pudo leer quién la tiene, no se desasigna`);
+  }
 }
 
 const idsDelBot = new Map<string, number>();
