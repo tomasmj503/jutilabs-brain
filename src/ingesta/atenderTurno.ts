@@ -113,6 +113,9 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     await atenderMedia(cfg, conv, decision.tipos);
     return { terminado: ATENDIDO };
   }
+  // D-09 / #15: adjunto + texto. El router decide por el texto y el adjunto no se leería nunca: se avisa al equipo
+  // (sin pausar). Ej.: «ya pagué» + la foto del comprobante.
+  await avisarAdjuntoConTexto(cfg, conv, turno);
   const idioma = detectarIdioma(turno.textoAgrupado, conv.idioma, cfg.idiomas);
   if (idioma !== conv.idioma) {
     const alerta = avisarFallo('NO SE GUARDÓ el idioma');
@@ -129,6 +132,27 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
   }
   const temaAltoValor = decision.tipo === 'escalar' ? decision.motivo : null;
   return { conv, temaAltoValor };
+}
+
+/**
+ * El turno trae texto Y adjuntos (foto, audio, documento…). El bot solo lee el texto; el equipo tiene que mirar el
+ * adjunto. Nota privada + aviso al celular, sin pausar y sin escribirle al huésped. Nunca frena el turno.
+ */
+async function avisarAdjuntoConTexto(cfg: ClienteConfig, conv: ContextoConversacion, turno: TurnoEntrante): Promise<void> {
+  const tipos = turno.mensajes.map((m) => m.tipo).filter((t) => t !== 'texto');
+  if (tipos.length === 0 || turno.textoAgrupado.trim() === '') return;
+  const nota = `📎 El huésped envió ${descripcionMedia(tipos)} junto con un mensaje. El bot solo lee el texto: `
+    + `revisa el adjunto en la conversación (por ejemplo, un comprobante de pago).\nMensaje del huésped: "${turno.textoAgrupado.slice(0, 300)}"`;
+  try {
+    const alerta = await alertarAlEquipo(cfg, conv.chatwootConversationId, nota);
+    if (!alerta.avisado) {
+      await registrarAvisoPendiente(cfg, conv.chatwootConversationId, {
+        nota, motivo: 'adjunto_con_texto', pausar: false, textoHuesped: null, idioma: conv.idioma, notaCreada: alerta.nota,
+      });
+    }
+  } catch (e) {
+    avisarFallo('NO SE PUDO AVISAR DEL ADJUNTO CON TEXTO')(e);
+  }
 }
 
 /** Avisa al equipo y pausa el bot DESPUÉS de que la respuesta ya salió (un solo mensaje al huésped). */
