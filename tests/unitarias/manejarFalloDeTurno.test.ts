@@ -6,7 +6,7 @@ const enviarMensajeMock = vi.fn().mockResolvedValue(999);
 const enviarNotaPrivadaMock = vi.fn().mockResolvedValue(undefined);
 const marcarAbiertaMock = vi.fn().mockResolvedValue(undefined);
 const pausarBotMock = vi.fn().mockResolvedValue(undefined);
-const avisarAlCelularMock = vi.fn().mockResolvedValue(undefined);
+const avisarAlCelularMock = vi.fn().mockResolvedValue('enviado');
 
 vi.mock('../../src/conversacion/almacen.js', () => ({
   guardarMensaje: guardarMensajeMock, obtenerContexto: obtenerContextoMock,
@@ -15,6 +15,7 @@ vi.mock('../../src/salida/chatwoot.js', () => ({
   enviarMensaje: enviarMensajeMock, enviarNotaPrivada: enviarNotaPrivadaMock, marcarAbierta: marcarAbiertaMock,
 }));
 vi.mock('../../src/salida/avisoEquipo.js', () => ({ avisarAlCelular: avisarAlCelularMock }));
+vi.mock('../../src/conversacion/avisoPendiente.js', () => ({ registrarAvisoPendiente: vi.fn() }));
 vi.mock('../../src/conversacion/estado.js', () => ({
   pausarBot: pausarBotMock, aplicarReactivacion: vi.fn(), estaPausado: vi.fn(), guardarIdioma: vi.fn(),
 }));
@@ -33,7 +34,10 @@ const turno = {
 const cfg = { id: 'c1', idiomaDefault: 'es', configExtra: {} } as never;
 
 describe('manejarFalloDeTurno', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    avisarAlCelularMock.mockResolvedValue('enviado');
+  });
 
   it('si Supabase responde, guarda el mensaje del huésped y escala normalmente', async () => {
     obtenerContextoMock.mockResolvedValueOnce({ id: 'conv1', idioma: 'es' });

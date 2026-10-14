@@ -55,16 +55,19 @@ export async function enviarYGuardar(
 
 export async function escalarYGuardar(
   cfg: ClienteConfig, conv: ContextoConversacion, pregunta: string, motivo: MotivoEscalamiento,
-): Promise<void> {
+): Promise<boolean> {
   const r = await responderYEscalar(cfg, conv.chatwootConversationId, conv.idioma, pregunta, motivo);
-  if (r.mensajeId === null) return; // el aviso al huésped no salió: no hay mensaje que guardar
+  if (r.mensajeId === null) return r.avisado; // el aviso al huésped no salió: no hay mensaje que guardar
   await guardarMensaje(cfg, {
     conversacionId: conv.id, chatwootMessageId: r.mensajeId, rol: 'bot',
     contenido: r.texto, origen: 'escalamiento',
   }).catch(avisarFallo('NO SE GUARDÓ el mensaje de escalamiento'));
+  return r.avisado;
 }
 
 type Preparado = { conv: ContextoConversacion; temaAltoValor: MotivoEscalamiento | null };
+/** prepararTurno terminó el turno por su cuenta (no hay nada más que hacer): ¿quedó atendido? */
+type TurnoTerminado = { terminado: ResultadoTurno };
 
 /**
  * Cómo terminó un turno. `atendido: false` = nadie le respondió al huésped ni se avisó al equipo de forma confirmada:
@@ -79,9 +82,9 @@ const ATENDIDO: ResultadoTurno = { atendido: true };
  * Si el router dice "escalar" (tema de alto valor), el turno SIGUE: el modelo responde con la
  * info real y, después de enviarla, se avisa al equipo y se pausa (ver atenderTurno).
  */
-async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<Preparado | null> {
+async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<Preparado | TurnoTerminado> {
   const primero = turno.mensajes[0];
-  if (!primero) return null;
+  if (!primero) return { terminado: ATENDIDO };
   const datos = {
     conversationId: turno.chatwootConversationId, contactId: primero.chatwootContactId || null,
     telefono: primero.telefono, canal: primero.canal,
@@ -102,11 +105,11 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     const detalle = decision.tipo === 'ignorar' ? decision.motivo : decision.tipo;
     console.log(`SIN RESPUESTA conv=${conv.chatwootConversationId} motivo=${detalle}`);
     if (decision.tipo === 'ignorar' && decision.motivo === 'bot_pausado') await acusarSiCorresponde(cfg, conv, turno);
-    return null;
+    return { terminado: ATENDIDO };
   }
   if (decision.tipo === 'media') {
     await atenderMedia(cfg, conv, decision.tipos);
-    return null;
+    return { terminado: ATENDIDO };
   }
   const idioma = detectarIdioma(turno.textoAgrupado, conv.idioma, cfg.idiomas);
   if (idioma !== conv.idioma) {
@@ -115,14 +118,12 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     conv = { ...conv, idioma };
   }
   if (decision.tipo === 'escalar' && decision.motivo === 'pidio_humano') {
-    await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'pidio_humano');
-    return null;
+    return { terminado: { atendido: await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'pidio_humano') } };
   }
   // Tope diario de mensajes del bot en esta conversación: no se gasta modelo, pasa al equipo y se pausa.
   if (await llegoAlTope(cfg, conv.id)) {
     console.log(`TOPE DIARIO conv=${conv.chatwootConversationId} limite=${cfg.limiteMensajesDiaConversacion}`);
-    await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'limite_mensajes');
-    return null;
+    return { terminado: { atendido: await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'limite_mensajes') } };
   }
   const temaAltoValor = decision.tipo === 'escalar' ? decision.motivo : null;
   return { conv, temaAltoValor };
@@ -140,7 +141,7 @@ async function avisarSiTemaAltoValor(
 /** Atiende un turno completo: memoria, router, saludo, modelo y envío. Va dentro del candado. */
 export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<ResultadoTurno> {
   const preparado = await prepararTurno(cfg, turno);
-  if (!preparado) return ATENDIDO;
+  if ('terminado' in preparado) return preparado.terminado;
   const { conv, temaAltoValor } = preparado;
   const texto = turno.textoAgrupado;
   const saludo = esSoloSaludo(texto) ? saludoFijo(cfg, conv.idioma) : null;
@@ -156,14 +157,8 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
     return ATENDIDO;
   }
   // Si falló del todo o el modelo no sabía el dato: ya escala con su propio motivo. No se duplica el aviso.
-  if (!resp) {
-    await escalarYGuardar(cfg, conv, texto, 'error_interno');
-    return ATENDIDO;
-  }
-  if (resp.noSeElDato) {
-    await escalarYGuardar(cfg, conv, texto, 'no_se_el_dato');
-    return ATENDIDO;
-  }
+  if (!resp) return { atendido: await escalarYGuardar(cfg, conv, texto, 'error_interno') };
+  if (resp.noSeElDato) return { atendido: await escalarYGuardar(cfg, conv, texto, 'no_se_el_dato') };
   if (!resp.texto) return ATENDIDO;
   if (esRepeticion(conv, resp.texto, texto)) {
     console.log(`REPETICIÓN EVITADA conv=${conv.chatwootConversationId}`);
@@ -252,9 +247,9 @@ export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntran
   const conversationId = turno.chatwootConversationId;
   if (causa instanceof EnvioIncierto) {
     // La respuesta pudo haber salido: mandar además "te paso con el equipo" duplicaría al huésped.
-    await alertarEnvioIncierto(cfg, conversationId, turno.textoAgrupado)
-      .catch(avisarFallo('ALERTA DE ENVÍO INCIERTO FALLÓ'));
-    return ATENDIDO;
+    const avisado = await alertarEnvioIncierto(cfg, conversationId, turno.textoAgrupado)
+      .catch((e) => { avisarFallo('ALERTA DE ENVÍO INCIERTO FALLÓ')(e); return false; });
+    return { atendido: avisado };
   }
   try {
     if (!primero) throw new Error('turno sin mensajes');
@@ -268,11 +263,11 @@ export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntran
         contenido: m.contenido || `[${m.tipo}]`, tipo: m.tipo,
       }).catch(avisarFallo('NO SE GUARDÓ el mensaje del huésped (recuperando turno fallido)'));
     }
-    await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'error_interno');
+    return { atendido: await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'error_interno') };
   } catch (e) {
     avisarFallo('NO SE PUDO RECUPERAR EL TURNO, se escala sin guardar historial')(e);
-    await responderYEscalar(cfg, conversationId, cfg.idiomaDefault, turno.textoAgrupado, 'error_interno')
-      .catch(avisarFallo('ESCALAMIENTO POR ERROR FALLÓ'));
+    const r = await responderYEscalar(cfg, conversationId, cfg.idiomaDefault, turno.textoAgrupado, 'error_interno')
+      .catch((e2) => { avisarFallo('ESCALAMIENTO POR ERROR FALLÓ')(e2); return null; });
+    return { atendido: r?.avisado === true };
   }
-  return ATENDIDO;
 }

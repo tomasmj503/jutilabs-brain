@@ -7,6 +7,10 @@ vi.mock('../../src/salida/chatwoot.js', () => ({
   enviarMensaje: enviarMensajeMock, enviarNotaPrivada: enviarNotaPrivadaMock, marcarAbierta: marcarAbiertaMock,
 }));
 vi.mock('../../src/conversacion/estado.js', () => ({ pausarBot: vi.fn() }));
+const avisarAlCelularMock = vi.fn();
+const registrarAvisoPendienteMock = vi.fn();
+vi.mock('../../src/salida/avisoEquipo.js', () => ({ avisarAlCelular: avisarAlCelularMock }));
+vi.mock('../../src/conversacion/avisoPendiente.js', () => ({ registrarAvisoPendiente: registrarAvisoPendienteMock }));
 
 const { avisarMensajeFallido } = await import('../../src/salida/escalamiento.js');
 const cfg = { id: 'c1' } as never;
@@ -16,6 +20,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   enviarNotaPrivadaMock.mockResolvedValue(undefined);
   marcarAbiertaMock.mockResolvedValue(undefined);
+  avisarAlCelularMock.mockResolvedValue('enviado');
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 
@@ -45,5 +50,15 @@ describe('avisarMensajeFallido', () => {
   it('recorta un texto larguísimo', async () => {
     await avisarMensajeFallido(cfg, 7, { error: null, contenido: 'a'.repeat(1000) });
     expect(nota().length).toBeLessThan(900);
+  });
+  it('PC-15: si la nota quedó pero el aviso al celular falló, queda pendiente (sin pausar ni escribirle al huésped)', async () => {
+    avisarAlCelularMock.mockResolvedValue('fallido');
+    await avisarMensajeFallido(cfg, 7, { error: null, contenido: 'x' });
+    expect(registrarAvisoPendienteMock).toHaveBeenCalledWith(cfg, 7, expect.objectContaining({ pausar: false, notaCreada: true, motivo: 'mensaje_fallido' }));
+    expect(enviarMensajeMock).not.toHaveBeenCalled();
+  });
+  it('PC-15: con el aviso confirmado no deja nada pendiente', async () => {
+    await avisarMensajeFallido(cfg, 7, { error: null, contenido: 'x' });
+    expect(registrarAvisoPendienteMock).not.toHaveBeenCalled();
   });
 });

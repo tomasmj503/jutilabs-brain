@@ -24,7 +24,7 @@ vi.mock('../../src/salida/chatwoot.js', async () => {
 });
 vi.mock('../../src/salida/avisoEquipo.js', async () => {
   const { mundo } = await import('./fakes/mundo.js');
-  return { avisarAlCelular: async (_c: unknown, _n: number, nota: string) => { mundo.avisosAlEquipo.push(nota); } };
+  return { avisarAlCelular: async (_c: unknown, _n: number, nota: string) => { mundo.avisosAlEquipo.push(nota); return 'enviado' as const; } };
 });
 vi.mock('../../src/llm/conReintento.js', async () => {
   const { mundo } = await import('./fakes/mundo.js');

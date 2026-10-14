@@ -5,20 +5,21 @@ const enviarMensajeMock = vi.fn();
 const enviarNotaPrivadaMock = vi.fn(async () => { orden.push('nota'); });
 const marcarAbiertaMock = vi.fn(async () => { orden.push('abrir'); });
 const pausarBotMock = vi.fn(async () => { orden.push('pausar'); });
-const avisarAlCelularMock = vi.fn(async () => { orden.push('celular'); });
+const avisarAlCelularMock = vi.fn(async () => { orden.push('celular'); return 'enviado' as const; });
 
 vi.mock('../../src/salida/chatwoot.js', () => ({
   enviarMensaje: enviarMensajeMock, enviarNotaPrivada: enviarNotaPrivadaMock, marcarAbierta: marcarAbiertaMock,
 }));
 vi.mock('../../src/conversacion/estado.js', () => ({ pausarBot: pausarBotMock }));
 vi.mock('../../src/salida/avisoEquipo.js', () => ({ avisarAlCelular: avisarAlCelularMock }));
+vi.mock('../../src/conversacion/avisoPendiente.js', () => ({ registrarAvisoPendiente: vi.fn() }));
 
 const { responderYEscalar, alertarEnvioIncierto, avisarEquipoYPausar, avisarMensajeFallido } =
   await import('../../src/salida/escalamiento.js');
 
 const cfg = { id: 'c1', idiomaDefault: 'es', configExtra: {} } as never;
 
-describe('cada nota al equipo también avisa al celular, al final (después de pausar el bot)', () => {
+describe('cada nota al equipo también avisa al celular; el bot se pausa DESPUÉS de confirmar el aviso (PC-15)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     orden.length = 0;
@@ -29,19 +30,19 @@ describe('cada nota al equipo también avisa al celular, al final (después de p
     enviarMensajeMock.mockResolvedValueOnce(55);
     await responderYEscalar(cfg, 9, 'es', '¿hay descuento?', 'no_se_el_dato');
     expect(avisarAlCelularMock).toHaveBeenCalledWith(cfg, 9, expect.stringContaining('Escalado por el bot'));
-    expect(orden).toEqual(['nota', 'abrir', 'pausar', 'celular']);
+    expect(orden).toEqual(['nota', 'abrir', 'celular', 'pausar']);
   });
 
   it('alertarEnvioIncierto', async () => {
     await alertarEnvioIncierto(cfg, 9, 'hola');
     expect(avisarAlCelularMock).toHaveBeenCalledWith(cfg, 9, expect.stringContaining('no pudo confirmar'));
-    expect(orden).toEqual(['nota', 'abrir', 'pausar', 'celular']);
+    expect(orden).toEqual(['nota', 'abrir', 'celular', 'pausar']);
   });
 
   it('avisarEquipoYPausar (tema de alto valor)', async () => {
     await avisarEquipoYPausar(cfg, 9, 'fuera_de_alcance' as never, 'India 2027');
     expect(avisarAlCelularMock).toHaveBeenCalledWith(cfg, 9, expect.stringContaining('Tema de alto valor'));
-    expect(orden).toEqual(['nota', 'abrir', 'pausar', 'celular']);
+    expect(orden).toEqual(['nota', 'abrir', 'celular', 'pausar']);
   });
 
   it('avisarMensajeFallido (Meta rechazó un mensaje)', async () => {
