@@ -1,7 +1,6 @@
 {
   "id": "tec-01",
   "ref": "#3 / PC-12 / REG-37",
-  "pendiente": "#3",
   "descripcion": "«india» avisa al equipo pero NO pausa: el segundo turno lo responde el modelo",
   "cliente": {
     "temasQueEscalan": [

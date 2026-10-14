@@ -145,3 +145,19 @@ export async function avisarMensajeFallido(
     });
   }
 }
+
+/**
+ * Un tema de la lista del cliente (India, voluntariado…) apareció en la conversación. El modelo ya respondió con la
+ * información real; aquí solo se le avisa al equipo (nota privada + celular), SIN pausar, SIN abrir ni desasignar y
+ * sin escribirle nada al huésped. Si el aviso no se confirma queda pendiente. Devuelve true si el equipo quedó avisado.
+ */
+export async function avisarTema(cfg: ClienteConfig, conversationId: number, tema: string, pregunta: string): Promise<boolean> {
+  const nota = `⭐ Tema de interés detectado (${tema}): el bot sigue atendiendo; revisa si hace falta dar seguimiento.\nMensaje del huésped: "${pregunta.slice(0, 300)}"`;
+  const alerta = await alertarAlEquipo(cfg, conversationId, nota);
+  if (!alerta.avisado) {
+    await registrarAvisoPendiente(cfg, conversationId, {
+      nota, motivo: 'tema', pausar: false, textoHuesped: null, idioma: cfg.idiomaDefault, notaCreada: alerta.nota,
+    });
+  }
+  return alerta.avisado;
+}

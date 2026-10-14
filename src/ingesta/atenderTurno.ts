@@ -4,7 +4,8 @@ import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
 import { avisarAlCelular } from '../salida/avisoEquipo.js';
-import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar } from '../salida/escalamiento.js';
+import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar, avisarTema } from '../salida/escalamiento.js';
+import { debeAvisarTema } from './avisoTema.js';
 import { avisoPorRedDeSeguridad, motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
 import { EnvioIncierto } from '../salida/errores.js';
 import { herramientas } from '../llm/herramientas/index.js';
@@ -67,7 +68,8 @@ export async function escalarYGuardar(
   return r.avisado;
 }
 
-type Preparado = { conv: ContextoConversacion; temaAltoValor: MotivoEscalamiento | null };
+/** `tema`: tema de la lista del cliente que apareció en el mensaje (avisa al equipo, no pausa). */
+type Preparado = { conv: ContextoConversacion; tema: string | null };
 /** prepararTurno terminó el turno por su cuenta (no hay nada más que hacer): ¿quedó atendido? */
 type TurnoTerminado = { terminado: ResultadoTurno };
 
@@ -81,8 +83,8 @@ const ATENDIDO: ResultadoTurno = { atendido: true };
 /**
  * Carga la conversación ANTES de guardar lo nuevo, guarda lo que escribió
  * el huésped y consulta al router. Devuelve null si el bot no debe responder nada.
- * Si el router dice "escalar" (tema de alto valor), el turno SIGUE: el modelo responde con la
- * info real y, después de enviarla, se avisa al equipo y se pausa (ver atenderTurno).
+ * Si el router detecta un tema de la lista del cliente, el turno SIGUE: el modelo responde con la
+ * info real y, después de enviarla, se avisa al equipo SIN pausar (ver atenderTurno).
  */
 async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<Preparado | TurnoTerminado> {
   const primero = turno.mensajes[0];
@@ -130,8 +132,8 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     console.log(`TOPE DIARIO conv=${conv.chatwootConversationId} limite=${cfg.limiteMensajesDiaConversacion}`);
     return { terminado: { atendido: await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'limite_mensajes') } };
   }
-  const temaAltoValor = decision.tipo === 'escalar' ? decision.motivo : null;
-  return { conv, temaAltoValor };
+  const tema = decision.tipo === 'escalar' ? (decision.tema ?? String(decision.motivo)) : null;
+  return { conv, tema };
 }
 
 /**
@@ -155,20 +157,34 @@ async function avisarAdjuntoConTexto(cfg: ClienteConfig, conv: ContextoConversac
   }
 }
 
-/** Avisa al equipo y pausa el bot DESPUÉS de que la respuesta ya salió (un solo mensaje al huésped). */
-async function avisarSiTemaAltoValor(
-  cfg: ClienteConfig, conv: ContextoConversacion, texto: string, temaAltoValor: MotivoEscalamiento | null,
+/**
+ * Después de que la respuesta ya salió (un solo mensaje al huésped):
+ *  · si el modelo pidió a una persona (pasar_a_persona) o el texto que salió lo promete (red de seguridad): se avisa
+ *    al equipo y se PAUSA (es una solicitud; el «en espera» es de la Fase 2);
+ *  · si solo apareció un tema de la lista del cliente: se avisa SIN pausar, una vez por ventana (D-09 / PC-12).
+ * Nunca lanza: el huésped ya tiene su respuesta.
+ */
+async function avisarAlFinal(
+  cfg: ClienteConfig, conv: ContextoConversacion, texto: string, tema: string | null,
+  herramientasUsadas: readonly string[], textoEnviado?: string,
 ): Promise<void> {
-  if (!temaAltoValor) return;
-  await avisarEquipoYPausar(cfg, conv.chatwootConversationId, temaAltoValor, texto)
-    .catch(avisarFallo('NO SE PUDO AVISAR AL EQUIPO (tema de alto valor)'));
+  const motivoPausa = motivoParaAvisarAlEquipo(null, herramientasUsadas, textoEnviado);
+  try {
+    if (motivoPausa) {
+      await avisarEquipoYPausar(cfg, conv.chatwootConversationId, motivoPausa, texto);
+    } else if (tema && (await debeAvisarTema(conv.id, tema))) {
+      await avisarTema(cfg, conv.chatwootConversationId, tema, texto);
+    }
+  } catch (e) {
+    avisarFallo('NO SE PUDO AVISAR AL EQUIPO (tema o solicitud de persona)')(e);
+  }
 }
 
 /** Atiende un turno completo: memoria, router, saludo, modelo y envío. Va dentro del candado. */
 export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<ResultadoTurno> {
   const preparado = await prepararTurno(cfg, turno);
   if ('terminado' in preparado) return preparado.terminado;
-  const { conv, temaAltoValor } = preparado;
+  const { conv, tema } = preparado;
   const texto = turno.textoAgrupado;
   const saludo = esSoloSaludo(texto) ? saludoFijo(cfg, conv.idioma) : null;
   const resp = saludo ? null : await responderConModelo(cfg, conv, texto, esSoloSaludo(texto));
@@ -179,7 +195,7 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   }
   if (saludo) {
     await enviarYGuardar(cfg, conv, saludo, { origen: 'saludo' });
-    await avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
+    await avisarAlFinal(cfg, conv, texto, tema, []);
     return ATENDIDO;
   }
   // Si falló del todo o el modelo no sabía el dato: ya escala con su propio motivo. No se duplica el aviso.
@@ -189,20 +205,18 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   if (esRepeticion(conv, resp.texto, texto)) {
     console.log(`REPETICIÓN EVITADA conv=${conv.chatwootConversationId}`);
     await enviarYGuardar(cfg, conv, textoFijo(cfg, 'mensajeNoEntendi', conv.idioma), { origen: 'no_entendi' });
-    await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas));
+    await avisarAlFinal(cfg, conv, texto, tema, resp.herramientasUsadas);
     return ATENDIDO;
   }
   await enviarYGuardar(cfg, conv, resp.texto, {
     origen: 'llm', modelo: resp.modelo, tokensEntrada: resp.tokensEntrada,
     tokensSalida: resp.tokensSalida, latenciaMs: resp.latenciaMs, herramientas: resp.herramientasUsadas,
   });
-  // Tema de alto valor (router), el modelo pidió a una persona (herramienta pasar_a_persona) o el texto que salió promete
-  // que una persona responderá (red de seguridad): se avisa al equipo y se pausa.
-  // Huella para el piloto: así se mide cuántas veces actúa la red y se repasan las falsas alarmas.
-  if (avisoPorRedDeSeguridad(temaAltoValor, resp.herramientasUsadas, resp.texto)) {
+  // Huella para el piloto: así se mide cuántas veces actúa la red de seguridad y se repasan las falsas alarmas.
+  if (avisoPorRedDeSeguridad(null, resp.herramientasUsadas, resp.texto)) {
     console.log(`RED DE SEGURIDAD conv=${conv.chatwootConversationId} promesa="${enmascararSensibles(resp.texto).replace(/\s+/g, ' ').slice(0, 200)}"`);
   }
-  await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas, resp.texto));
+  await avisarAlFinal(cfg, conv, texto, tema, resp.herramientasUsadas, resp.texto);
   return ATENDIDO;
 }
 

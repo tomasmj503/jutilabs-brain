@@ -1,7 +1,6 @@
 {
   "id": "tec-02",
   "ref": "#3 / PC-12 / UNI-TEMAS",
-  "pendiente": "#3",
   "descripcion": "«informaciones» y «transformaciones» no disparan el tema «formacion» (palabra completa)",
   "cliente": {
     "temasQueEscalan": [

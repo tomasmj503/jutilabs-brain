@@ -105,7 +105,7 @@ export interface ContextoConversacion {
 
 export type DecisionRouter =
   | { tipo: 'ignorar'; motivo: string } // bot pausado, mensaje de agente, etc.
-  | { tipo: 'escalar'; motivo: MotivoEscalamiento; mensajeAlHuesped: string | null }
+  | { tipo: 'escalar'; motivo: MotivoEscalamiento; mensajeAlHuesped: string | null; /** Tema de la lista que lo disparó (fuera_de_alcance). */ tema?: string }
   | { tipo: 'formulario'; estado: EstadoFormulario }
   | { tipo: 'media'; tipos: TipoMensaje[] } // solo audio/imagen/ubicación, sin texto: pide que escriba y avisa al equipo
   | { tipo: 'llm' };
