@@ -188,7 +188,7 @@ describe('bandeja durable', () => {
 
   it('si el turno revienta, la recuperación escala y el mensaje queda atendido', async () => {
     await crearCliente('a', 1);
-    await guardarEntranteDurable(await clienteConfig('a'), aviso(501, 'hola'));
+    await guardarEntranteDurable(await clienteConfig('a'), aviso(501, '¿hay cupo en la clase de mañana?'));
     await envejecer(5);
     mundo.guion.push({ error: true }, { error: true });
     await barrerBandeja();
