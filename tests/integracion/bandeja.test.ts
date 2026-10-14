@@ -307,4 +307,17 @@ describe('avisos al equipo pendientes', () => {
     expect(r2.avisosCompletados).toBe(1);
     expect((await atendidoAt()).every((x) => x !== null)).toBe(true);
   });
+
+  it('un aviso sin confirmar de más de 15 min se cuenta para /health/ready (con Postgres real)', async () => {
+    await crearCliente('a', 1);
+    const cfg = await clienteConfig('a');
+    const { contarAvisosSinConfirmar } = await import('../../src/conversacion/avisoPendiente.js');
+    const { registrarAvisoPendiente } = await import('../../src/conversacion/avisoPendiente.js');
+    const { asegurarConversacion } = await import('../../src/conversacion/almacen.js');
+    await asegurarConversacion(cfg, { conversationId: 7, contactId: 5, telefono: null, canal: 'whatsapp' });
+    await registrarAvisoPendiente(cfg, 7, { nota: 'x', motivo: 'tema', pausar: false, textoHuesped: null, idioma: 'es', notaCreada: false });
+    expect(await contarAvisosSinConfirmar(cfg, 15 * 60_000)).toBe(0); // recién creado
+    await conPg((c) => c.query(`update public.conversaciones set aviso_pendiente_at = now() - interval '20 minutes'`));
+    expect(await contarAvisosSinConfirmar(cfg, 15 * 60_000)).toBe(1);
+  });
 });

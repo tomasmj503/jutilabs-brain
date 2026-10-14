@@ -5,11 +5,14 @@ import { registrarWebhookChatwoot } from './ingesta/webhook.js';
 import { redis } from './db/redis.js';
 import { apagarOrdenado } from './apagado.js';
 import { iniciarBarrido } from './ingesta/bandeja.js';
+import { registrarSalud } from './operacion/listo.js';
 
 const log = pino({ level: env.LOG_LEVEL });
 const app = Fastify({ logger: false });
 
+// /health = el proceso vive (HEALTHCHECK de Docker). /health/ready = está en condiciones de atender (monitor externo).
 app.get('/health', async () => ({ ok: true, servicio: 'jutilabs-brain', env: env.NODE_ENV }));
+await registrarSalud(app);
 await registrarWebhookChatwoot(app);
 
 app
