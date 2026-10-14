@@ -1,0 +1,48 @@
+# Dependencias REALES para las pruebas de integración (no es el compose de producción).
+# Local:  docker compose -f tests/integracion/docker-compose.yml up -d --wait && npm run test:integracion
+# Datos en tmpfs: cada `up` arranca limpio. Los puertos son altos para no chocar con servicios locales.
+name: jutilabs-integracion
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "54329:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      # Roles de Supabase (anon, authenticated, service_role, authenticator): Postgres plano no los trae.
+      - ./bd/00-roles.sql:/docker-entrypoint-initdb.d/00-roles.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "63799:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # supabase-js habla con PostgREST: así el código de producción corre sin cambios contra Postgres real.
+  postgrest:
+    image: postgrest/postgrest:v12.2.3
+    environment:
+      PGRST_DB_URI: postgres://authenticator:authpass@postgres:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: jwt-secreto-solo-para-pruebas-de-integracion-0123456789
+    ports:
+      - "3009:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy

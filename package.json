@@ -14,7 +14,8 @@
     "test:regresion": "vitest run tests/regresion",
     "lint": "echo 'TODO: eslint' && exit 0",
     "prueba:llm": "tsx --env-file=.env tests/prueba-llm/correr.ts",
-    "typecheck:pruebas": "tsc -p tests/prueba-llm/tsconfig.json"
+    "typecheck:pruebas": "tsc -p tests/prueba-llm/tsconfig.json",
+    "test:integracion": "vitest run --config vitest.integracion.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
@@ -26,6 +27,8 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
+    "@types/pg": "^8.23.1",
+    "pg": "^8.23.1",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
