@@ -7,6 +7,7 @@ import { textoFijo } from '../ingesta/textosFijos.js';
 import { EnvioIncierto } from './errores.js';
 import { alertarAlEquipo, conUnReintento } from './alertaEquipo.js';
 import { avisarAlCelular } from './avisoEquipo.js';
+import { explicarFallaDePlataforma } from '../llm/fallaPlataforma.js';
 
 export type ResultadoEscalamiento = {
   texto: string;
@@ -181,4 +182,14 @@ async function avisarSinPausar(cfg: ClienteConfig, conversationId: number, motiv
     });
   }
   return alerta.avisado;
+}
+
+/**
+ * El proveedor del modelo respondió 400/401/402 (PC-21): el bot NO está pudiendo responder a NADIE. Alerta operativa
+ * (no es una escalación de este huésped): no pausa ni le escribe nada al huésped.
+ */
+export async function avisarFallaDePlataforma(cfg: ClienteConfig, conversationId: number, status: number, pregunta: string): Promise<boolean> {
+  return avisarSinPausar(cfg, conversationId, 'plataforma',
+    `🚨 El proveedor del modelo respondió ${status} (${explicarFallaDePlataforma(status)}). El bot NO está respondiendo a los huéspedes: `
+    + `requiere atención técnica. Sus mensajes quedan guardados y el bot los reintenta solo.\nÚltimo mensaje afectado: "${pregunta.slice(0, 200)}"`);
 }

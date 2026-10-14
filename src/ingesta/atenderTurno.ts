@@ -3,9 +3,11 @@ import { guardarMensaje, obtenerContexto, type MensajeAGuardar } from '../conver
 import { llamarLLMConReintento } from '../llm/conReintento.js';
 import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
+import { redis } from '../db/redis.js';
 import { avisarAlCelular } from '../salida/avisoEquipo.js';
-import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar, avisarTema, avisarRespuestaParcial } from '../salida/escalamiento.js';
+import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar, avisarTema, avisarRespuestaParcial, avisarFallaDePlataforma } from '../salida/escalamiento.js';
 import { debeAvisarTema } from './avisoTema.js';
+import { esFallaDePlataforma, estadoHttp } from '../llm/fallaPlataforma.js';
 import { avisoPorRedDeSeguridad, motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
 import { EnvioIncierto } from '../salida/errores.js';
 import { herramientas } from '../llm/herramientas/index.js';
@@ -190,6 +192,12 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   const texto = turno.textoAgrupado;
   const saludo = esSoloSaludo(texto) ? saludoFijo(cfg, conv.idioma) : null;
   const resp = saludo ? null : await responderConModelo(cfg, conv, texto, esSoloSaludo(texto));
+  // PC-21: falla de plataforma del proveedor (400/401/402): no se pausa ni se le escribe al huésped; una alerta
+  // operativa y el mensaje queda sin atender (la bandeja lo reintenta y, pasados 15 min, lo escala).
+  if (resp && 'plataforma' in resp) {
+    await avisarFallaDePlataformaUnaVez(cfg, conv, resp.plataforma, texto);
+    return { atendido: false };
+  }
   // Justo antes de enviar: si una persona tomó la conversación mientras tanto, no se le pisa.
   if (await estaPausado(cfg, conv.id)) {
     console.log(`NO SE ENVÍA conv=${conv.chatwootConversationId} motivo=una persona tomó la conversación`);
@@ -225,11 +233,28 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
 }
 
 type Resp = Awaited<ReturnType<typeof llamarLLMConReintento>>;
+type FallaPlataforma = { plataforma: number };
 
-/** Pide la respuesta al modelo. Devuelve null si falló del todo (ya se reintentó). */
+/** Una alerta operativa por cliente y estado cada 10 min, no una por huésped. Si Redis falla, se avisa igual. */
+async function avisarFallaDePlataformaUnaVez(cfg: ClienteConfig, conv: ContextoConversacion, status: number, texto: string): Promise<void> {
+  try {
+    let primera = true;
+    try {
+      primera = (await redis.set(`plataforma:${cfg.id}:${status}`, '1', 'EX', 600, 'NX')) !== null;
+    } catch {
+      primera = true;
+    }
+    if (!primera) return;
+    await avisarFallaDePlataforma(cfg, conv.chatwootConversationId, status, texto);
+  } catch (e) {
+    avisarFallo('NO SE PUDO AVISAR LA FALLA DE PLATAFORMA DEL MODELO')(e);
+  }
+}
+
+/** Pide la respuesta al modelo. Devuelve null si falló del todo, o { plataforma } si fue una falla del proveedor. */
 async function responderConModelo(
   cfg: ClienteConfig, conv: ContextoConversacion, texto: string, esSaludo: boolean,
-): Promise<Resp | null> {
+): Promise<Resp | FallaPlataforma | null> {
   try {
     const r = await llamarLLMConReintento(
       armarMensajes(cfg, conv, texto, esSaludo), herramientas, { cfg, conv },
@@ -239,7 +264,8 @@ async function responderConModelo(
     console.log(`LLM ${r.modelo} ${r.latenciaMs}ms tokens ${r.tokensEntrada}/${r.tokensSalida} herramientas=[${h}] noSe=${r.noSeElDato}`);
     return r;
   } catch (e) {
-    console.error('LLM FALLÓ DEL TODO:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
+    console.error(`LLM FALLÓ DEL TODO status=${estadoHttp(e) ?? 'sin-status'}:`, e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
+    if (esFallaDePlataforma(e)) return { plataforma: estadoHttp(e) as number };
     return null;
   }
 }
