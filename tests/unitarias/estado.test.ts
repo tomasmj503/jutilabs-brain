@@ -1,20 +1,42 @@
-import { describe, it, expect, vi } from 'vitest';
-import { debeReactivar } from '../../src/conversacion/estado.js';
-vi.mock('../../src/db/supabase.js', () => ({ supabase: {} }));
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const ahora = new Date('2026-09-21T12:00:00Z');
+const actualizaciones: Array<Record<string, unknown>> = [];
+vi.mock('../../src/db/supabase.js', () => {
+  const cadena = (cambios: Record<string, unknown>) => {
+    actualizaciones.push(cambios);
+    const c: { eq: () => typeof c; then: (f: (r: { error: null }) => unknown) => unknown } = {
+      eq: () => c,
+      then: (f) => Promise.resolve({ error: null }).then(f),
+    };
+    return c;
+  };
+  return { supabase: { from: () => ({ update: cadena }) } };
+});
 
-describe('debeReactivar (pausa de 5 horas)', () => {
-  it('no reactiva antes de cumplirse las horas', () => {
-    expect(debeReactivar('2026-09-21T08:00:00Z', 5, ahora)).toBe(false);
+const estado = await import('../../src/conversacion/estado.js');
+
+const cfg = { id: 'c1' } as never;
+
+// D-08 / PC-11: el bot NUNCA vuelve a hablar por tiempo. Solo se libera de forma explícita (nota privada "#max").
+// Antes este archivo fijaba lo contrario del manual (reactivar a las 5 h y al instante sin fecha).
+describe('estado: sin reactivación por tiempo', () => {
+  beforeEach(() => { actualizaciones.length = 0; });
+
+  // Pendiente #2: hoy existen debeReactivar y aplicarReactivacion. Al arreglarlo este `it.fails` pasa a `it`.
+  it.fails('el módulo no ofrece ninguna reactivación por tiempo', () => {
+    expect(estado).not.toHaveProperty('debeReactivar');
+    expect(estado).not.toHaveProperty('aplicarReactivacion');
   });
-  it('reactiva justo al cumplirse las horas', () => {
-    expect(debeReactivar('2026-09-21T07:00:00Z', 5, ahora)).toBe(true);
+
+  it('la liberación explícita (reactivarBot) deja el bot activo y anota cuándo', async () => {
+    await estado.reactivarBot(cfg, 7);
+    expect(actualizaciones).toHaveLength(1);
+    expect(actualizaciones[0]).toMatchObject({ estado_bot: 'activo' });
+    expect(typeof actualizaciones[0]?.reactivado_at).toBe('string');
   });
-  it('reactiva pasadas las horas', () => {
-    expect(debeReactivar('2026-09-20T12:00:00Z', 5, ahora)).toBe(true);
-  });
-  it('sin fecha de pausa se reactiva', () => {
-    expect(debeReactivar(null, 5, ahora)).toBe(true);
+
+  it('pausar guarda la fecha y el motivo (para el acuse), pero eso no programa ninguna vuelta', async () => {
+    await estado.pausarBot(cfg, 7, 'agente_respondio');
+    expect(actualizaciones[0]).toMatchObject({ estado_bot: 'pausado', motivo_escalamiento: 'agente_respondio' });
   });
 });
