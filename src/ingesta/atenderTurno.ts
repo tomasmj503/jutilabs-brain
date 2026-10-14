@@ -16,6 +16,7 @@ import { esRepeticion } from './repeticion.js';
 import { textoFijo } from './textosFijos.js';
 import { debeAcusar } from './acuse.js';
 import { debeAvisarMedia, descripcionMedia } from './avisoMedia.js';
+import { enmascararSensibles } from '../seguridad/enmascarar.js';
 
 type Mensajes = Parameters<typeof llamarLLMConReintento>[0];
 type Extra = Partial<Pick<MensajeAGuardar,
@@ -32,8 +33,9 @@ export function armarMensajes(cfg: ClienteConfig, conv: ContextoConversacion, te
   for (const m of conv.ultimosMensajes) {
     const esHuesped = m.rol === 'huesped';
     const esBotOAgente = m.rol === 'bot' || m.rol === 'agente';
-    if (esHuesped) historial.push({ rol: 'user', contenido: m.contenido });
-    else if (esBotOAgente) historial.push({ rol: 'assistant', contenido: m.contenido });
+    // Se enmascara también el historial: hay mensajes guardados antes de que existiera el enmascarado de entrada.
+    if (esHuesped) historial.push({ rol: 'user', contenido: enmascararSensibles(m.contenido) });
+    else if (esBotOAgente) historial.push({ rol: 'assistant', contenido: enmascararSensibles(m.contenido) });
   }
   const sistema = { rol: 'system' as const, contenido: construirSystemPrompt(cfg, conv, esSaludo) };
   return [sistema, ...historial, { rol: 'user', contenido: texto }];
@@ -158,7 +160,7 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   // que una persona responderá (red de seguridad): se avisa al equipo y se pausa.
   // Huella para el piloto: así se mide cuántas veces actúa la red y se repasan las falsas alarmas.
   if (avisoPorRedDeSeguridad(temaAltoValor, resp.herramientasUsadas, resp.texto)) {
-    console.log(`RED DE SEGURIDAD conv=${conv.chatwootConversationId} promesa="${resp.texto.replace(/\s+/g, ' ').slice(0, 200)}"`);
+    console.log(`RED DE SEGURIDAD conv=${conv.chatwootConversationId} promesa="${enmascararSensibles(resp.texto).replace(/\s+/g, ' ').slice(0, 200)}"`);
   }
   await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas, resp.texto));
 }

@@ -3,6 +3,7 @@ import type { ClienteConfig, ContextoConversacion, HerramientaLLM, RespuestaLLM 
 import { env, secretoPorRef } from '../config/env.js';
 import { parametrosExtra } from './parametrosExtra.js';
 import { causaDelCorte, esCorteDeConexion } from './corteDeConexion.js';
+import { enmascararSensibles } from '../seguridad/enmascarar.js';
 
 const MARCA_NO_SE = '[[NO_SE]]';
 const MAX_RONDAS_HERRAMIENTAS = 3;
@@ -120,7 +121,8 @@ async function conversar(
         if (!herramienta) throw new Error('Herramienta desconocida');
         const args = JSON.parse(llamada.function.arguments || '{}') as Record<string, unknown>;
         resultado = await herramienta.ejecutar(args, ctx);
-        console.log(`HERRAMIENTA ${nombre} args=${JSON.stringify(args)} resultado=${JSON.stringify(resultado).slice(0, 400)}`);
+        // Solo los NOMBRES de los argumentos: sus valores salen de lo que escribió el huésped.
+        console.log(`HERRAMIENTA ${nombre} args=[${Object.keys(args).join(',')}] resultado=${enmascararSensibles(JSON.stringify(resultado)).slice(0, 400)}`);
         usadas.push(nombre);
       } catch (e) {
         console.error(`HERRAMIENTA FALLÓ ${nombre}:`, e instanceof Error ? e.message : e);

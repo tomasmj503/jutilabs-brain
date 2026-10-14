@@ -4,6 +4,7 @@ import { yaProcesado } from './dedup.js';
 import { agregarAlBuffer } from './buffer.js';
 import { conCandadoEsperando } from './esperaCandado.js';
 import { atenderTurno, manejarFalloDeTurno } from './atenderTurno.js';
+import { enmascararSensibles } from '../seguridad/enmascarar.js';
 
 /** Mensaje que ENTRA del huésped: duplicados → buffer → candado (con espera) → turno. */
 export async function procesarEntrante(cfg: ClienteConfig, a: Aviso): Promise<void> {
@@ -21,7 +22,9 @@ export async function procesarEntrante(cfg: ClienteConfig, a: Aviso): Promise<vo
   const msg: MensajeEntrante = {
     clienteId: cfg.id, chatwootAccountId: cfg.chatwootAccountId, chatwootConversationId: conversationId,
     chatwootContactId: a.contactId ?? 0, chatwootMessageId: a.messageId ?? 0,
-    canal: 'whatsapp', telefono: a.telefono, contenido: a.contenido, tipo: a.contenido ? 'texto' : tipoDeAdjuntos(a.adjuntos),
+    canal: 'whatsapp', telefono: a.telefono,
+    // Tarjetas y claves se ocultan aquí, antes del buffer: la base, la nota, Telegram y el modelo ya reciben el texto limpio.
+    contenido: enmascararSensibles(a.contenido), tipo: a.contenido ? 'texto' : tipoDeAdjuntos(a.adjuntos),
     recibidoAt: new Date().toISOString(),
   };
   const turno = await agregarAlBuffer(msg);

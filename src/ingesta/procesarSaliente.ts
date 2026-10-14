@@ -5,6 +5,7 @@ import { avisarFallo } from './atenderTurno.js';
 import { guardarMensaje, obtenerContexto } from '../conversacion/almacen.js';
 import { pausarBot } from '../conversacion/estado.js';
 import { idUsuarioBot } from '../salida/chatwoot.js';
+import { enmascararSensibles } from '../seguridad/enmascarar.js';
 
 /** Mensaje que SALE en Chatwoot: si lo escribió una persona del equipo, el bot se pausa. */
 export async function procesarSaliente(cfg: ClienteConfig, a: Aviso): Promise<void> {
@@ -24,7 +25,7 @@ export async function procesarSaliente(cfg: ClienteConfig, a: Aviso): Promise<vo
   if (a.contenido) {
     await guardarMensaje(cfg, {
       conversacionId: conv.id, chatwootMessageId: a.messageId, rol: 'agente',
-      contenido: a.contenido, origen: 'agente',
+      contenido: enmascararSensibles(a.contenido), origen: 'agente',
     }).catch(avisarFallo('NO SE GUARDÓ el mensaje del agente'));
   }
   await pausarBot(cfg, conversationId, 'agente_respondio');
