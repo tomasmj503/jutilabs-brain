@@ -38,6 +38,9 @@ describe('construirSystemPrompt', () => {
     expect(p).toContain('no tiene nada que ver con este negocio');
     expect(p).toContain('NUNCA escribas [[NO_SE]] ni llames a pasar_a_persona');
   });
+  it('#17: si el huésped escribe en un idioma que no es español ni inglés, responde en inglés', () => {
+    expect(construirSystemPrompt(cfg, conv)).toContain('Si escribe en cualquier otro idioma, responde en inglés');
+  });
   it('sin temas que escalan, no agrega esa sección', () => {
     expect(construirSystemPrompt(cfg, conv)).not.toContain('TEMAS QUE AVISAN AL EQUIPO');
   });

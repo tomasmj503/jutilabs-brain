@@ -16,7 +16,7 @@ export function construirSystemPrompt(
   const partes: string[] = [
     cfg.promptBase.trim(),
     `IDENTIDAD\nTe llamas ${cfg.nombreBot}. Eres un asistente virtual, no una persona; si te preguntan, lo dices.`,
-    `IDIOMA\nResponde en ${idioma}. Si el huésped escribe en otro de estos idiomas (${cfg.idiomas.join(', ')}), responde en ese.`,
+    `IDIOMA\nResponde en ${idioma}. Si el huésped escribe en otro de estos idiomas (${cfg.idiomas.join(', ')}), responde en ese. Si escribe en cualquier otro idioma, responde en inglés.`,
     `FECHA Y HORA ACTUAL\n${ahora}`,
     `REGLAS DURAS\n- Nunca inventes datos. Nunca digas que algo es gratis, sin costo o está incluido si no aparece en los datos.\n- Responde con UN solo mensaje corto.\n`
     + `- Si no tienes NINGÚN dato para responder, escribe al final exactamente ${MARCA_NO_SE}. Si tienes el dato o parte de él, respóndelo y NO escribas ${MARCA_NO_SE}.\n`
