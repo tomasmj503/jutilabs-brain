@@ -49,8 +49,8 @@ describe('manejarFalloDeTurno', () => {
 
   // PC-20 / #13: si no se puede leer el estado de la conversación NO se sabe si una persona la tiene tomada:
   // no se le escribe al huésped ni se toca la asignación; solo se avisa al equipo. (Antes esta prueba fijaba
-  // lo contrario: «igual avisa al huésped».) Pendiente #13: al arreglarlo este `it.fails` pasa a `it`.
-  it.fails('si Supabase sigue caído (estado ilegible): NO le escribe al huésped; deja nota y avisa al equipo', async () => {
+  // lo contrario: «igual avisa al huésped».)
+  it('si Supabase sigue caído (estado ilegible): NO le escribe al huésped; deja nota y avisa al equipo', async () => {
     obtenerContextoMock.mockRejectedValueOnce(new Error('sigue caído'));
     await manejarFalloDeTurno(cfg, turno);
     expect(guardarMensajeMock).not.toHaveBeenCalled();
@@ -58,6 +58,14 @@ describe('manejarFalloDeTurno', () => {
     expect(pausarBotMock).not.toHaveBeenCalled();
     expect(enviarNotaPrivadaMock).toHaveBeenCalledWith(cfg, 1, expect.stringContaining('hola'));
     expect(avisarAlCelularMock).toHaveBeenCalledWith(cfg, 1, expect.stringContaining('hola'));
+  });
+
+  it('si la conversación está pausada (una persona la tiene): no le escribe al huésped ni escala otra vez', async () => {
+    obtenerContextoMock.mockResolvedValueOnce({ id: 'conv1', idioma: 'es', estadoBot: 'pausado' });
+    const r = await manejarFalloDeTurno(cfg, turno);
+    expect(r).toEqual({ atendido: true });
+    expect(enviarMensajeMock).not.toHaveBeenCalled();
+    expect(pausarBotMock).not.toHaveBeenCalled();
   });
 
   it('si la falla fue un envío que no se pudo confirmar: NO manda otro mensaje al huésped, solo alerta al equipo', async () => {

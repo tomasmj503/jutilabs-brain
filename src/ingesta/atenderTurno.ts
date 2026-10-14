@@ -17,6 +17,8 @@ import { textoFijo } from './textosFijos.js';
 import { debeAcusar } from './acuse.js';
 import { debeAvisarMedia, descripcionMedia } from './avisoMedia.js';
 import { enmascararSensibles } from '../seguridad/enmascarar.js';
+import { alertarAlEquipo } from '../salida/alertaEquipo.js';
+import { registrarAvisoPendiente } from '../conversacion/avisoPendiente.js';
 
 type Mensajes = Parameters<typeof llamarLLMConReintento>[0];
 type Extra = Partial<Pick<MensajeAGuardar,
@@ -263,11 +265,24 @@ export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntran
         contenido: m.contenido || `[${m.tipo}]`, tipo: m.tipo,
       }).catch(avisarFallo('NO SE GUARDÓ el mensaje del huésped (recuperando turno fallido)'));
     }
+    if (conv.estadoBot === 'pausado') {
+      // Una persona (o una escalación previa) tiene la conversación: el bot calla igual que en un turno normal.
+      console.log(`SIN RESPUESTA conv=${conversationId} motivo=bot_pausado (recuperando un turno fallido)`);
+      return ATENDIDO;
+    }
     return { atendido: await escalarYGuardar(cfg, conv, turno.textoAgrupado, 'error_interno') };
   } catch (e) {
-    avisarFallo('NO SE PUDO RECUPERAR EL TURNO, se escala sin guardar historial')(e);
-    const r = await responderYEscalar(cfg, conversationId, cfg.idiomaDefault, turno.textoAgrupado, 'error_interno')
-      .catch((e2) => { avisarFallo('ESCALAMIENTO POR ERROR FALLÓ')(e2); return null; });
-    return { atendido: r?.avisado === true };
+    // #13 / PC-20: si no se puede leer el estado de la conversación NO se sabe si una persona la tiene tomada.
+    // Escribirle al huésped (y desasignar al agente) sería pisarla: solo se avisa al equipo.
+    avisarFallo('NO SE PUDO LEER EL ESTADO DE LA CONVERSACIÓN: no se le escribe al huésped, se avisa al equipo')(e);
+    const nota = '⚠️ El bot tuvo una falla técnica y NO pudo leer el estado de esta conversación, así que no le respondió al huésped '
+      + `(podría estar atendiéndolo una persona). Revisa la conversación y respóndele tú si hace falta.\nMensaje del huésped: "${turno.textoAgrupado.slice(0, 300)}"`;
+    const alerta = await alertarAlEquipo(cfg, conversationId, nota, { abrir: true });
+    if (!alerta.avisado) {
+      await registrarAvisoPendiente(cfg, conversationId, {
+        nota, motivo: 'estado_ilegible', pausar: false, textoHuesped: null, idioma: cfg.idiomaDefault, notaCreada: alerta.nota,
+      });
+    }
+    return { atendido: alerta.avisado };
   }
 }

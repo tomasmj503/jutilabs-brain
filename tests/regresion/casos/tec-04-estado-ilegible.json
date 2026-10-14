@@ -1,7 +1,6 @@
 {
   "id": "tec-04",
   "ref": "#13 / PC-20 / UNI-FALLO",
-  "pendiente": "#13",
   "descripcion": "con Supabase caído no se le escribe al huésped; sí hay nota y aviso al equipo",
   "baseCaida": true,
   "turnos": [
