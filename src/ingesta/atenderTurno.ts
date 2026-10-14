@@ -37,11 +37,13 @@ export function saludoFijo(cfg: ClienteConfig, idioma: string): string | null {
 export function armarMensajes(cfg: ClienteConfig, conv: ContextoConversacion, texto: string, esSaludo = false): Mensajes {
   const historial: Mensajes = [];
   for (const m of conv.ultimosMensajes) {
-    const esHuesped = m.rol === 'huesped';
-    const esBotOAgente = m.rol === 'bot' || m.rol === 'agente';
     // Se enmascara también el historial: hay mensajes guardados antes de que existiera el enmascarado de entrada.
-    if (esHuesped) historial.push({ rol: 'user', contenido: enmascararSensibles(m.contenido) });
-    else if (esBotOAgente) historial.push({ rol: 'assistant', contenido: enmascararSensibles(m.contenido) });
+    const contenido = enmascararSensibles(m.contenido);
+    if (m.rol === 'huesped') historial.push({ rol: 'user', contenido });
+    else if (m.rol === 'bot') historial.push({ rol: 'assistant', contenido });
+    // #22: lo que dijo una PERSONA del equipo no es del bot. Entra como contexto con su prefijo, nunca como `assistant`
+    // (si no, el modelo cree que lo dijo él y lo repite o lo contradice).
+    else if (m.rol === 'agente') historial.push({ rol: 'user', contenido: `[Equipo] ${contenido}` });
   }
   const sistema = { rol: 'system' as const, contenido: construirSystemPrompt(cfg, conv, esSaludo) };
   return [sistema, ...historial, { rol: 'user', contenido: texto }];
