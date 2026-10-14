@@ -77,3 +77,10 @@ export const cargarClientePorChatwootAccount = (chatwootAccountId: number) =>
 
 /** Cliente por su slug (ruta /webhook/chatwoot/:slug). */
 export const cargarClientePorSlug = (slug: string) => cargarConCache(cachePorSlug, slug, 'slug', slug);
+
+/** Todos los clientes activos (para trabajadores que recorren a todos, como el barrido de la bandeja). */
+export async function cargarClientesActivos(): Promise<ClienteConfig[]> {
+  const { data, error } = await supabase.from('clientes').select('*').eq('activo', true);
+  if (error) throw new Error(`Error leyendo clientes activos: ${error.message}`);
+  return ((data ?? []) as FilaCliente[]).map(aConfig);
+}

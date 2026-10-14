@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const turnos: Array<{ mensajes: Array<{ contenido: string }>; textoAgrupado: string }> = [];
 vi.mock('../../src/config/env.js', () => ({ env: { BUFFER_MS: 0 }, secretoPorRef: () => 'x' }));
 vi.mock('../../src/db/redis.js', () => ({ redis: {} }));
+vi.mock('../../src/conversacion/almacen.js', () => ({ marcarAtendidos: async () => undefined }));
 vi.mock('../../src/ingesta/dedup.js', () => ({ yaProcesado: async () => false }));
 vi.mock('../../src/ingesta/buffer.js', () => ({
   agregarAlBuffer: async (m: { contenido: string }) => ({ mensajes: [m], textoAgrupado: m.contenido, clienteId: 'c1', chatwootConversationId: 7 }),
@@ -12,7 +13,7 @@ vi.mock('../../src/ingesta/esperaCandado.js', () => ({
   conCandadoEsperando: async (_k: string, f: () => Promise<unknown>) => ({ ok: true, valor: await f() }),
 }));
 vi.mock('../../src/ingesta/atenderTurno.js', () => ({
-  atenderTurno: async (_c: unknown, t: (typeof turnos)[number]) => { turnos.push(t); },
+  atenderTurno: async (_c: unknown, t: (typeof turnos)[number]) => { turnos.push(t); return { atendido: true }; },
   manejarFalloDeTurno: vi.fn(),
 }));
 

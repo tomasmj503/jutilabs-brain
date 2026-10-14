@@ -44,3 +44,30 @@ export function crearRedisDePrueba(): Redis {
 export async function limpiarTablas(): Promise<void> {
   await conPg((c) => c.query('truncate table public.mensajes, public.leads, public.conversaciones, public.clientes cascade'));
 }
+
+/** Redis real con un interruptor: `estado.caido = true` hace fallar toda operación (simula Redis detenido). */
+export function redisConInterruptor(): { redis: Redis; estado: { caido: boolean } } {
+  const real = crearRedisDePrueba();
+  const estado = { caido: false };
+  const redis = new Proxy(real, {
+    get(destino, propiedad) {
+      const valor = Reflect.get(destino, propiedad) as unknown;
+      if (typeof valor !== 'function') return valor;
+      if (propiedad === 'quit' || propiedad === 'disconnect' || propiedad === 'on') return valor.bind(destino);
+      return (...args: unknown[]) => (estado.caido
+        ? Promise.reject(new Error('Redis caído (simulado)'))
+        : (valor as (...a: unknown[]) => unknown).apply(destino, args));
+    },
+  });
+  return { redis, estado };
+}
+
+/** Crea un cliente de prueba y devuelve su id. */
+export async function crearCliente(slug: string, cuenta: number, extra: Record<string, unknown> = {}): Promise<string> {
+  const r = await crearSupabaseDePrueba().from('clientes').insert({
+    slug, nombre: `Cliente ${slug}`, chatwoot_token_ref: 'T', llm_modelo: 'm', openrouter_key_ref: 'K',
+    chatwoot_account_id: cuenta, ...extra,
+  }).select('id').single();
+  if (r.error) throw new Error(`No se pudo crear el cliente de prueba: ${r.error.message}`);
+  return (r.data as { id: string }).id;
+}

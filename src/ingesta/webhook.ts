@@ -8,6 +8,7 @@ import { procesarEntrante } from './procesarEntrante.js';
 import { procesarSaliente } from './procesarSaliente.js';
 import { registrarEnCurso } from './enCurso.js';
 import { procesarActualizacion } from './revisarFallo.js';
+import { esEntranteGuardable, guardarEntranteDurable } from './bandeja.js';
 
 /**
  * Webhooks de Chatwoot. Responden 200 al instante SIEMPRE que el aviso es legítimo (si no, Chatwoot reintenta).
@@ -54,9 +55,33 @@ async function despachar(a: Aviso & { accountId: number }, cfgDeLaRuta: ClienteC
   if (a.direccion === 'entrante' && cfg.botActivo) await procesarEntrante(cfg, a);
 }
 
-function aceptar(req: FastifyRequest, reply: FastifyReply, cfgDeLaRuta: ClienteConfig | null): FastifyReply {
+/** Tope para el guardado previo al 200: si Supabase tarda más, se responde igual (el camino asíncrono lo guarda). */
+const TOPE_GUARDADO_ANTES_DEL_200_MS = 4_000;
+
+/**
+ * Bandeja durable: el mensaje del huésped queda en la base ANTES de responder 200. Best-effort: si falla o tarda,
+ * se responde 200 igual (Chatwoot no debe reintentar) y el camino asíncrono lo vuelve a intentar al procesarlo.
+ */
+async function guardarAntesDelOk(aviso: Aviso, cfgDeLaRuta: ClienteConfig | null): Promise<void> {
+  if (!esEntranteGuardable(aviso) || aviso.accountId === null) return;
+  try {
+    const cfg = cfgDeLaRuta ?? await cargarClientePorChatwootAccount(aviso.accountId);
+    if (!cfg || !cfg.activo) return;
+    let reloj: NodeJS.Timeout | undefined;
+    const tope = new Promise<void>((resolver) => {
+      reloj = setTimeout(resolver, TOPE_GUARDADO_ANTES_DEL_200_MS);
+    });
+    await Promise.race([guardarEntranteDurable(cfg, aviso), tope]);
+    clearTimeout(reloj);
+  } catch (e) {
+    console.error(`BANDEJA: no se pudo guardar antes del 200 conv=${aviso.conversationId} mensaje=${aviso.messageId}:`, e instanceof Error ? e.message : e);
+  }
+}
+
+async function aceptar(req: FastifyRequest, reply: FastifyReply, cfgDeLaRuta: ClienteConfig | null): Promise<FastifyReply> {
   const aviso = leerAviso(req.body);
   if ((aviso.evento === 'message_created' || aviso.evento === 'message_updated') && aviso.accountId !== null && aviso.conversationId !== null) {
+    await guardarAntesDelOk(aviso, cfgDeLaRuta);
     // Se anota como "en curso": si el cerebro se apaga, espera a que termine (ver src/apagado.ts).
     registrarEnCurso(despachar({ ...aviso, accountId: aviso.accountId }, cfgDeLaRuta).catch((e) => {
       console.error('Falló el procesamiento del aviso:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
@@ -98,7 +123,7 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
     if (!secretosIguales(leerSecreto(req.headers['x-jutilabs-secret'], req.query), esperado)) return rechazar();
     // El secreto de un cliente solo vale para SU cuenta de Chatwoot (PC-22).
     if (accountIdDelCuerpo(req.body) !== cfg.chatwootAccountId) return rechazar();
-    return aceptar(req, reply, cfg);
+    return await aceptar(req, reply, cfg);
   });
 
   // Ruta vieja: secreto global. Se conserva temporalmente; el cliente sale del account_id del cuerpo.
@@ -106,6 +131,6 @@ export async function registrarWebhookChatwoot(app: FastifyInstance): Promise<vo
     const recibido = leerSecreto(req.headers['x-jutilabs-secret'], req.query);
     if (!secretosIguales(recibido, env.CHATWOOT_WEBHOOK_SECRET)) return reply.code(401).send({ ok: false });
     console.warn('WEBHOOK RUTA OBSOLETA /webhook/chatwoot (secreto global): migrar Chatwoot a /webhook/chatwoot/<slug> con secreto propio');
-    return aceptar(req, reply, null);
+    return await aceptar(req, reply, null);
   });
 }

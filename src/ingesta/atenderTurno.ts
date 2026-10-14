@@ -67,6 +67,13 @@ export async function escalarYGuardar(
 type Preparado = { conv: ContextoConversacion; temaAltoValor: MotivoEscalamiento | null };
 
 /**
+ * Cómo terminó un turno. `atendido: false` = nadie le respondió al huésped ni se avisó al equipo de forma confirmada:
+ * su mensaje queda sin `atendido_at` y el barrido de la bandeja (bandeja.ts) lo retoma.
+ */
+export type ResultadoTurno = { atendido: boolean };
+const ATENDIDO: ResultadoTurno = { atendido: true };
+
+/**
  * Carga la conversación ANTES de guardar lo nuevo, aplica la reactivación, guarda lo que escribió
  * el huésped y consulta al router. Devuelve null si el bot no debe responder nada.
  * Si el router dice "escalar" (tema de alto valor), el turno SIGUE: el modelo responde con la
@@ -79,11 +86,15 @@ async function prepararTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<
     conversationId: turno.chatwootConversationId, contactId: primero.chatwootContactId || null,
     telefono: primero.telefono, canal: primero.canal,
   };
-  let conv = await aplicarReactivacion(cfg, await obtenerContexto(cfg, datos));
+  // Los mensajes de este turno ya se guardaron al llegar (bandeja durable): no van al historial del modelo.
+  const idsDelTurno = turno.mensajes.map((m) => m.chatwootMessageId).filter((id) => id > 0);
+  let conv = await aplicarReactivacion(cfg, await obtenerContexto(cfg, datos, idsDelTurno));
   for (const m of turno.mensajes) {
     await guardarMensaje(cfg, {
       conversacionId: conv.id, chatwootMessageId: m.chatwootMessageId || null, rol: 'huesped',
       contenido: m.contenido || `[${m.tipo}]`, tipo: m.tipo,
+      // Sin id de Chatwoot no hay forma de marcarlo después: nace atendido para que el barrido no lo rehaga.
+      ...(m.chatwootMessageId ? {} : { atendidoAt: new Date().toISOString() }),
     }).catch(avisarFallo('NO SE GUARDÓ el mensaje del huésped'));
   }
   const decision = await rutear(turno, conv, cfg);
@@ -127,9 +138,9 @@ async function avisarSiTemaAltoValor(
 }
 
 /** Atiende un turno completo: memoria, router, saludo, modelo y envío. Va dentro del candado. */
-export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<void> {
+export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<ResultadoTurno> {
   const preparado = await prepararTurno(cfg, turno);
-  if (!preparado) return;
+  if (!preparado) return ATENDIDO;
   const { conv, temaAltoValor } = preparado;
   const texto = turno.textoAgrupado;
   const saludo = esSoloSaludo(texto) ? saludoFijo(cfg, conv.idioma) : null;
@@ -137,20 +148,28 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   // Justo antes de enviar: si una persona tomó la conversación mientras tanto, no se le pisa.
   if (await estaPausado(cfg, conv.id)) {
     console.log(`NO SE ENVÍA conv=${conv.chatwootConversationId} motivo=una persona tomó la conversación`);
-    return;
+    return ATENDIDO;
   }
   if (saludo) {
     await enviarYGuardar(cfg, conv, saludo, { origen: 'saludo' });
-    return avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
+    await avisarSiTemaAltoValor(cfg, conv, texto, temaAltoValor);
+    return ATENDIDO;
   }
   // Si falló del todo o el modelo no sabía el dato: ya escala con su propio motivo. No se duplica el aviso.
-  if (!resp) return escalarYGuardar(cfg, conv, texto, 'error_interno');
-  if (resp.noSeElDato) return escalarYGuardar(cfg, conv, texto, 'no_se_el_dato');
-  if (!resp.texto) return;
+  if (!resp) {
+    await escalarYGuardar(cfg, conv, texto, 'error_interno');
+    return ATENDIDO;
+  }
+  if (resp.noSeElDato) {
+    await escalarYGuardar(cfg, conv, texto, 'no_se_el_dato');
+    return ATENDIDO;
+  }
+  if (!resp.texto) return ATENDIDO;
   if (esRepeticion(conv, resp.texto, texto)) {
     console.log(`REPETICIÓN EVITADA conv=${conv.chatwootConversationId}`);
     await enviarYGuardar(cfg, conv, textoFijo(cfg, 'mensajeNoEntendi', conv.idioma), { origen: 'no_entendi' });
-    return avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas));
+    await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas));
+    return ATENDIDO;
   }
   await enviarYGuardar(cfg, conv, resp.texto, {
     origen: 'llm', modelo: resp.modelo, tokensEntrada: resp.tokensEntrada,
@@ -163,6 +182,7 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
     console.log(`RED DE SEGURIDAD conv=${conv.chatwootConversationId} promesa="${enmascararSensibles(resp.texto).replace(/\s+/g, ' ').slice(0, 200)}"`);
   }
   await avisarSiTemaAltoValor(cfg, conv, texto, motivoParaAvisarAlEquipo(temaAltoValor, resp.herramientasUsadas, resp.texto));
+  return ATENDIDO;
 }
 
 type Resp = Awaited<ReturnType<typeof llamarLLMConReintento>>;
@@ -227,14 +247,14 @@ async function acusarSiCorresponde(cfg: ClienteConfig, conv: ContextoConversacio
  * igual recibe el aviso de "lo paso al equipo" (esa vez sin quedar en el historial).
  * Si la falla fue un envío que no se pudo confirmar (EnvioIncierto), no se manda nada más al huésped.
  */
-export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntrante, causa?: unknown): Promise<void> {
+export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntrante, causa?: unknown): Promise<ResultadoTurno> {
   const primero = turno.mensajes[0];
   const conversationId = turno.chatwootConversationId;
   if (causa instanceof EnvioIncierto) {
     // La respuesta pudo haber salido: mandar además "te paso con el equipo" duplicaría al huésped.
     await alertarEnvioIncierto(cfg, conversationId, turno.textoAgrupado)
       .catch(avisarFallo('ALERTA DE ENVÍO INCIERTO FALLÓ'));
-    return;
+    return ATENDIDO;
   }
   try {
     if (!primero) throw new Error('turno sin mensajes');
@@ -254,4 +274,5 @@ export async function manejarFalloDeTurno(cfg: ClienteConfig, turno: TurnoEntran
     await responderYEscalar(cfg, conversationId, cfg.idiomaDefault, turno.textoAgrupado, 'error_interno')
       .catch(avisarFallo('ESCALAMIENTO POR ERROR FALLÓ'));
   }
+  return ATENDIDO;
 }

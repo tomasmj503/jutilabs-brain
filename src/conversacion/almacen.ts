@@ -17,7 +17,7 @@ export type FilaConversacion = {
   estado_bot: string;
 };
 
-export type FilaMensaje = { rol: string; contenido: string | null };
+export type FilaMensaje = { rol: string; contenido: string | null; chatwoot_message_id?: number | null };
 
 export type DatosConversacion = {
   conversationId: number;
@@ -38,6 +38,8 @@ export type MensajeAGuardar = {
   tokensSalida?: number | undefined;
   latenciaMs?: number | undefined;
   herramientas?: string[] | undefined;
+  /** Solo para mensajes del huésped que ya nacen atendidos (ej. bot apagado: el equipo lo ve abierto). */
+  atendidoAt?: string | undefined;
 };
 
 function esRol(x: string): x is RolMensaje {
@@ -77,6 +79,11 @@ async function leerConversacion(cfg: ClienteConfig, conversationId: number): Pro
   return data as unknown as FilaConversacion | null;
 }
 
+/** Trae (o crea) la fila de la conversación. Idempotente: dos llamadas a la vez dejan una sola fila. */
+export async function asegurarConversacion(cfg: ClienteConfig, datos: DatosConversacion): Promise<FilaConversacion> {
+  return buscarOCrear(cfg, datos);
+}
+
 async function buscarOCrear(cfg: ClienteConfig, datos: DatosConversacion): Promise<FilaConversacion> {
   const existente = await leerConversacion(cfg, datos.conversationId);
   if (existente) return existente;
@@ -97,18 +104,29 @@ async function buscarOCrear(cfg: ClienteConfig, datos: DatosConversacion): Promi
   return creada;
 }
 
-/** Trae (o crea) la conversación y sus últimos mensajes. Llamar ANTES de guardar el mensaje nuevo. */
-export async function obtenerContexto(cfg: ClienteConfig, datos: DatosConversacion): Promise<ContextoConversacion> {
+/**
+ * Trae (o crea) la conversación y sus últimos mensajes. Llamar ANTES de guardar el mensaje nuevo.
+ * `excluirMensajeIds`: ids de Chatwoot de los mensajes del turno en curso. Como ahora se guardan antes del 200
+ * (bandeja durable), ya están en la base y no deben aparecer también en el historial que ve el modelo.
+ */
+export async function obtenerContexto(
+  cfg: ClienteConfig, datos: DatosConversacion, excluirMensajeIds: readonly number[] = [],
+): Promise<ContextoConversacion> {
   const fila = await buscarOCrear(cfg, datos);
   const { data, error } = await supabase
     .from('mensajes')
-    .select('rol, contenido')
+    .select('rol, contenido, chatwoot_message_id')
     .eq('cliente_id', cfg.id)
     .eq('conversacion_id', fila.id)
     .order('created_at', { ascending: false })
-    .limit(VENTANA_MENSAJES);
+    // Se piden de más los que luego se descartan, para seguir devolviendo VENTANA_MENSAJES.
+    .limit(VENTANA_MENSAJES + excluirMensajeIds.length);
   if (error) throw new Error(`Error leyendo los mensajes: ${error.message}`);
-  const recientes = ((data ?? []) as unknown as FilaMensaje[]).reverse();
+  const excluir = new Set(excluirMensajeIds);
+  const recientes = ((data ?? []) as unknown as FilaMensaje[])
+    .filter((m) => m.chatwoot_message_id === null || m.chatwoot_message_id === undefined || !excluir.has(Number(m.chatwoot_message_id)))
+    .slice(0, VENTANA_MENSAJES)
+    .reverse();
   return armarContexto(fila, recientes);
 }
 
@@ -127,6 +145,21 @@ export async function guardarMensaje(cfg: ClienteConfig, m: MensajeAGuardar): Pr
     tokens_salida: m.tokensSalida ?? null,
     latencia_ms: m.latenciaMs ?? null,
     herramientas_usadas: m.herramientas ?? null,
+    // Solo se envía si viene: así guardar un mensaje normal no depende de que la columna exista.
+    ...(m.atendidoAt ? { atendido_at: m.atendidoAt } : {}),
   });
   if (error && error.code !== '23505') throw new Error(`Error guardando el mensaje: ${error.message}`);
+}
+
+/**
+ * Marca como atendidos los mensajes del huésped de un turno (el bot respondió, o el equipo fue avisado y lo confirmó).
+ * Un fallo aquí se lanza: quien llama decide, pero NUNCA debe provocar que se conteste dos veces (ver bandeja.ts).
+ */
+export async function marcarAtendidos(cfg: ClienteConfig, chatwootMessageIds: readonly number[]): Promise<void> {
+  const ids = chatwootMessageIds.filter((id) => id > 0);
+  if (ids.length === 0) return;
+  const { error } = await supabase.from('mensajes')
+    .update({ atendido_at: new Date().toISOString() })
+    .eq('cliente_id', cfg.id).eq('rol', 'huesped').in('chatwoot_message_id', ids).is('atendido_at', null);
+  if (error) throw new Error(`Error marcando mensajes como atendidos: ${error.message}`);
 }
