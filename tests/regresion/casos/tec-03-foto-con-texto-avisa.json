@@ -1,0 +1,26 @@
+{
+  "id": "tec-03",
+  "ref": "#15 / D-09 / REG-56",
+  "pendiente": "#15",
+  "descripcion": "foto + texto: responde al texto y además avisa al equipo del adjunto (sin pausar)",
+  "turnos": [
+    {
+      "mensajes": [
+        {
+          "texto": "ya pagué, te mando el comprobante",
+          "adjuntos": [
+            "imagen"
+          ]
+        }
+      ],
+      "modelo": {
+        "texto": "Gracias por avisar."
+      }
+    }
+  ],
+  "esperado": {
+    "mensajesAlHuesped": 1,
+    "pausado": false,
+    "avisosAlEquipo": 1
+  }
+}

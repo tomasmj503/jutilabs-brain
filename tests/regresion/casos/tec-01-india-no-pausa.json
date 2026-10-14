@@ -1,0 +1,48 @@
+{
+  "id": "tec-01",
+  "ref": "#3 / PC-12 / REG-37",
+  "pendiente": "#3",
+  "descripcion": "«india» avisa al equipo pero NO pausa: el segundo turno lo responde el modelo",
+  "cliente": {
+    "temasQueEscalan": [
+      "india"
+    ]
+  },
+  "turnos": [
+    {
+      "mensajes": [
+        {
+          "texto": "Quiero información del viaje a India"
+        }
+      ],
+      "modelo": {
+        "texto": "Claro, te cuento del viaje."
+      },
+      "esperado": {
+        "mensajesAlHuesped": 1,
+        "pausado": false,
+        "avisosAlEquipo": 1
+      }
+    },
+    {
+      "mensajes": [
+        {
+          "texto": "¿Y cuánto dura?"
+        }
+      ],
+      "modelo": {
+        "texto": "Dura dos semanas."
+      },
+      "esperado": {
+        "mensajesAlHuesped": 2,
+        "pausado": false,
+        "llamadasAlModelo": 2
+      }
+    }
+  ],
+  "esperado": {
+    "mensajesAlHuesped": 2,
+    "pausado": false,
+    "llamadasAlModelo": 2
+  }
+}
