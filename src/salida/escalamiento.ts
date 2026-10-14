@@ -193,3 +193,13 @@ export async function avisarFallaDePlataforma(cfg: ClienteConfig, conversationId
     `🚨 El proveedor del modelo respondió ${status} (${explicarFallaDePlataforma(status)}). El bot NO está respondiendo a los huéspedes: `
     + `requiere atención técnica. Sus mensajes quedan guardados y el bot los reintenta solo.\nÚltimo mensaje afectado: "${pregunta.slice(0, 200)}"`);
 }
+
+/**
+ * ADR-11 / PC-14: el turno perdió el candado de la conversación (venció o lo tomó otro turno) y NO envió su respuesta,
+ * para no cruzarla con la de otro turno. Se avisa al equipo; el mensaje queda sin atender y la bandeja lo retoma.
+ */
+export async function avisarCandadoPerdido(cfg: ClienteConfig, conversationId: number, pregunta: string): Promise<boolean> {
+  return avisarSinPausar(cfg, conversationId, 'candado_perdido',
+    `⚠️ El bot perdió el control de esta conversación a mitad de un turno y NO envió su respuesta (para no cruzarla con otra). `
+    + `Revisa si el huésped ya fue atendido; si no, el bot lo reintenta solo.\nMensaje del huésped: "${pregunta.slice(0, 300)}"`);
+}

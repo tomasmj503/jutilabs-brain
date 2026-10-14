@@ -5,8 +5,9 @@ import { construirSystemPrompt } from '../llm/prompt.js';
 import { enviarMensaje, enviarNotaPrivada } from '../salida/chatwoot.js';
 import { redis } from '../db/redis.js';
 import { avisarAlCelular } from '../salida/avisoEquipo.js';
-import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar, avisarTema, avisarRespuestaParcial, avisarFallaDePlataforma } from '../salida/escalamiento.js';
+import { alertarEnvioIncierto, responderYEscalar, avisarEquipoYPausar, avisarTema, avisarRespuestaParcial, avisarFallaDePlataforma, avisarCandadoPerdido } from '../salida/escalamiento.js';
 import { debeAvisarTema } from './avisoTema.js';
+import type { Candado } from './lock.js';
 import { esFallaDePlataforma, estadoHttp } from '../llm/fallaPlataforma.js';
 import { avisoPorRedDeSeguridad, motivoParaAvisarAlEquipo } from './avisoDeEquipo.js';
 import { EnvioIncierto } from '../salida/errores.js';
@@ -185,7 +186,7 @@ async function avisarAlFinal(
 }
 
 /** Atiende un turno completo: memoria, router, saludo, modelo y envío. Va dentro del candado. */
-export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Promise<ResultadoTurno> {
+export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante, candado?: Candado): Promise<ResultadoTurno> {
   const preparado = await prepararTurno(cfg, turno);
   if ('terminado' in preparado) return preparado.terminado;
   const { conv, tema } = preparado;
@@ -202,6 +203,13 @@ export async function atenderTurno(cfg: ClienteConfig, turno: TurnoEntrante): Pr
   if (await estaPausado(cfg, conv.id)) {
     console.log(`NO SE ENVÍA conv=${conv.chatwootConversationId} motivo=una persona tomó la conversación`);
     return ATENDIDO;
+  }
+  // ADR-11 / PC-14: antes de enviar se comprueba que el candado siga siendo NUESTRO. Si venció (turno muy largo,
+  // Redis con problemas) otro turno puede estar respondiendo: este no envía y escala en vez de cruzar respuestas.
+  if (candado && !(await candado.sigueSiendoMio())) {
+    console.error(`NO SE ENVÍA conv=${conv.chatwootConversationId} motivo=el turno perdió el candado`);
+    await avisarCandadoPerdido(cfg, conv.chatwootConversationId, texto).catch(avisarFallo('NO SE PUDO AVISAR EL CANDADO PERDIDO'));
+    return { atendido: false };
   }
   if (saludo) {
     await enviarYGuardar(cfg, conv, saludo, { origen: 'saludo' });

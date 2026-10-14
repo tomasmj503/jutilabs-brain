@@ -27,15 +27,17 @@ function esErrorReintentable(e: unknown): boolean {
  */
 async function crearConReintento(
   cliente: OpenAI, cuerpo: OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, modelo: string, ronda: number,
+  signal?: AbortSignal,
 ): Promise<OpenAI.Chat.ChatCompletion> {
   const inicio = Date.now();
+  const opciones = signal ? { signal } : undefined;
   try {
-    return await cliente.chat.completions.create(cuerpo);
+    return await cliente.chat.completions.create(cuerpo, opciones);
   } catch (e) {
-    if (!esCorteDeConexion(e)) throw e;
+    if (signal?.aborted || !esCorteDeConexion(e)) throw e;
     console.error(`LLM REINTENTO CONEXION modelo=${modelo} ronda=${ronda} tras=${Date.now() - inicio}ms causa=${causaDelCorte(e)}`);
     await new Promise((r) => setTimeout(r, PAUSA_REINTENTO_CONEXION_MS));
-    return await cliente.chat.completions.create(cuerpo);
+    return await cliente.chat.completions.create(cuerpo, opciones);
   }
 }
 
@@ -45,6 +47,7 @@ async function conversar(
   herramientas: HerramientaLLM[],
   ctx: Ctx,
   forzarHerramienta: boolean,
+  signal?: AbortSignal,
 ): Promise<RespuestaLLM> {
   const cliente = new OpenAI({
     apiKey: secretoPorRef(ctx.cfg.openrouterKeyRef),
@@ -68,6 +71,7 @@ async function conversar(
   const proveedores: string[] = [];
 
   for (let ronda = 0; ronda <= MAX_RONDAS_HERRAMIENTAS; ronda++) {
+    if (signal?.aborted) throw new Error('Tope del turno agotado entre rondas de herramientas');
     const rondaForzada = forzarHerramienta && ronda === 0;
     const tools = rondaForzada && toolsPrimeraRonda.length > 0 ? toolsPrimeraRonda : toolsTodas;
     const puedeUsarHerramientas = tools.length > 0 && ronda < MAX_RONDAS_HERRAMIENTAS;
@@ -82,7 +86,7 @@ async function conversar(
       // Primera ronda: el modelo DEBE consultar una herramienta (no puede responder de memoria).
       ...(puedeUsarHerramientas ? { tools, tool_choice: rondaForzada ? ('required' as const) : ('auto' as const) } : {}),
     };
-    const r = await crearConReintento(cliente, cuerpo as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, modelo, ronda);
+    const r = await crearConReintento(cliente, cuerpo as OpenAI.Chat.ChatCompletionCreateParamsNonStreaming, modelo, ronda, signal);
 
     // OpenRouter agrega "provider" a la respuesta (no está en el tipo de OpenAI).
     proveedores.push((r as { provider?: string }).provider || 'desconocido');
@@ -139,14 +143,14 @@ export async function llamarLLM(
   mensajes: Mensaje[],
   herramientas: HerramientaLLM[],
   ctx: Ctx,
-  opciones: { forzarHerramienta?: boolean } = {},
+  opciones: { forzarHerramienta?: boolean; signal?: AbortSignal } = {},
 ): Promise<RespuestaLLM> {
   const forzar = opciones.forzarHerramienta ?? true;
   try {
-    return await conversar(ctx.cfg.llmModelo, mensajes, herramientas, ctx, forzar);
+    return await conversar(ctx.cfg.llmModelo, mensajes, herramientas, ctx, forzar, opciones.signal);
   } catch (e) {
     console.error(`Falló ${ctx.cfg.llmModelo}: status=${(e as { status?: number })?.status ?? "sin-status"} motivo=${e instanceof Error ? e.message : String(e)}`);
-    if (!ctx.cfg.llmModeloRespaldo || !esErrorReintentable(e)) throw e;
-    return await conversar(ctx.cfg.llmModeloRespaldo, mensajes, herramientas, ctx, forzar);
+    if (opciones.signal?.aborted || !ctx.cfg.llmModeloRespaldo || !esErrorReintentable(e)) throw e;
+    return await conversar(ctx.cfg.llmModeloRespaldo, mensajes, herramientas, ctx, forzar, opciones.signal);
   }
 }

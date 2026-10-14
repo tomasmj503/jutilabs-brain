@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { apagarOrdenado, TOPE_APAGADO_MS } from '../../src/apagado.js';
 import { registrarEnCurso } from '../../src/ingesta/enCurso.js';
+import { TOPE_TURNO_MS } from '../../src/llm/topeTurno.js';
 
 const dormir = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -48,7 +49,8 @@ describe('el tope de apagado y stop_grace_period van juntos', () => {
     expect(gracia).toBeGreaterThan(TOPE_APAGADO_MS);
   });
 
-  it('el tope es menor que el candado de la conversación (120 s): esperar más no serviría', () => {
-    expect(TOPE_APAGADO_MS).toBeLessThan(120_000);
+  it('el tope cubre el peor turno: tope duro del modelo + buffer, preparación, envío y avisos', () => {
+    // buffer 4 s + preparar 5 s + envío 10 s + notas ~10 s sobre el tope duro del turno (ADR-11)
+    expect(TOPE_APAGADO_MS).toBeGreaterThanOrEqual(TOPE_TURNO_MS + 29_000);
   });
 });

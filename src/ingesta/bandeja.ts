@@ -172,8 +172,8 @@ async function atenderConversacion(cfg: ClienteConfig, conversacionId: string, f
 
   const turno = armarTurno(cfg, conv, pendientes);
   try {
-    const ejecutado = await conCandado(`${cfg.id}:${conv.chatwoot_conversation_id}`, async () => {
-      await atenderYMarcar(cfg, turno);
+    const ejecutado = await conCandado(`${cfg.id}:${conv.chatwoot_conversation_id}`, async (candado) => {
+      await atenderYMarcar(cfg, turno, candado);
       return true;
     });
     if (ejecutado === null) {

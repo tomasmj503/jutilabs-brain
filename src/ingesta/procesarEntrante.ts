@@ -5,6 +5,7 @@ import { yaProcesado } from './dedup.js';
 import { agregarAlBuffer } from './buffer.js';
 import { conCandadoEsperando } from './esperaCandado.js';
 import { atenderTurno, manejarFalloDeTurno } from './atenderTurno.js';
+import type { Candado } from './lock.js';
 import { enmascararSensibles } from '../seguridad/enmascarar.js';
 import { alertarAlEquipo } from '../salida/alertaEquipo.js';
 
@@ -14,10 +15,10 @@ import { alertarAlEquipo } from '../salida/alertaEquipo.js';
  * Si marcar falla NO se lanza: el turno ya contestó y repetirlo duplicaría la respuesta (el barrido lo detecta:
  * ve que ya hay una respuesta posterior).
  */
-export async function atenderYMarcar(cfg: ClienteConfig, turno: TurnoEntrante): Promise<void> {
+export async function atenderYMarcar(cfg: ClienteConfig, turno: TurnoEntrante, candado?: Candado): Promise<void> {
   let resultado: { atendido: boolean };
   try {
-    resultado = await atenderTurno(cfg, turno);
+    resultado = await atenderTurno(cfg, turno, candado);
   } catch (e) {
     console.error('FALLÓ EL TURNO:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
     resultado = await manejarFalloDeTurno(cfg, turno, e);
@@ -52,7 +53,7 @@ export async function procesarEntrante(cfg: ClienteConfig, a: Aviso): Promise<vo
   };
   const turno = await agregarAlBuffer(msg);
   if (!turno) return;
-  const r = await conCandadoEsperando(`${cfg.id}:${conversationId}`, () => atenderYMarcar(cfg, turno));
+  const r = await conCandadoEsperando(`${cfg.id}:${conversationId}`, (candado) => atenderYMarcar(cfg, turno, candado));
   if (!r.ok) {
     console.error(`TURNO PERDIDO conv=${conversationId}: siguió ocupada más allá del vencimiento del candado`);
     // #19: no solo el log. El mensaje ya está guardado sin atender (la bandeja lo retoma); el equipo se entera ya.
