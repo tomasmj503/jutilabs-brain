@@ -6,6 +6,7 @@ import { agregarAlBuffer } from './buffer.js';
 import { conCandadoEsperando } from './esperaCandado.js';
 import { atenderTurno, manejarFalloDeTurno } from './atenderTurno.js';
 import { enmascararSensibles } from '../seguridad/enmascarar.js';
+import { alertarAlEquipo } from '../salida/alertaEquipo.js';
 
 /**
  * Corre un turno y, si termina atendido, marca sus mensajes (`atendido_at`). Si el turno revienta se recupera con
@@ -52,5 +53,13 @@ export async function procesarEntrante(cfg: ClienteConfig, a: Aviso): Promise<vo
   const turno = await agregarAlBuffer(msg);
   if (!turno) return;
   const r = await conCandadoEsperando(`${cfg.id}:${conversationId}`, () => atenderYMarcar(cfg, turno));
-  if (!r.ok) console.error(`TURNO PERDIDO conv=${conversationId}: siguió ocupada más allá del vencimiento del candado`);
+  if (!r.ok) {
+    console.error(`TURNO PERDIDO conv=${conversationId}: siguió ocupada más allá del vencimiento del candado`);
+    // #19: no solo el log. El mensaje ya está guardado sin atender (la bandeja lo retoma); el equipo se entera ya.
+    await alertarAlEquipo(cfg, conversationId,
+      '⚠️ El bot no pudo atender un mensaje del huésped (la conversación seguía ocupada). Revisa la conversación y '
+      + `respóndele tú; el bot volverá a intentarlo en unos minutos.\nMensaje del huésped: "${turno.textoAgrupado.slice(0, 300)}"`,
+      { abrir: true },
+    );
+  }
 }

@@ -27,13 +27,13 @@ describe('avisarAlCelular', () => {
   });
 
   it('cliente sin grupo de avisos: no llama a n8n', async () => {
-    await avisarAlCelular(cfgSin, 9, 'nota');
+    expect(await avisarAlCelular(cfgSin, 9, 'nota')).toBe('sin_canal');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('con grupo: manda a n8n la clave, el grupo, la nota y el enlace a la conversación', async () => {
     fetchMock.mockResolvedValueOnce(new Response('{"ok":true}', { status: 200 }));
-    await avisarAlCelular(cfgCon, 9, '🤖 Escalado por el bot: no tenía el dato.');
+    expect(await avisarAlCelular(cfgCon, 9, '🤖 Escalado por el bot: no tenía el dato.')).toBe('enviado');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
     expect(String(url)).toBe(VARIABLES.N8N_WEBHOOK_AVISOS);
@@ -48,13 +48,13 @@ describe('avisarAlCelular', () => {
 
   it('si n8n rechaza (403), no lanza y lo deja en el log', async () => {
     fetchMock.mockResolvedValue(new Response('Authorization data is wrong!', { status: 403 }));
-    await expect(avisarAlCelular(cfgCon, 9, 'nota')).resolves.toBeUndefined();
+    await expect(avisarAlCelular(cfgCon, 9, 'nota')).resolves.toBe('fallido');
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('HTTP 403'));
   });
 
   it('si falla la red, no lanza y lo deja en el log', async () => {
     fetchMock.mockRejectedValue(new Error('caído'));
-    await expect(avisarAlCelular(cfgCon, 9, 'nota')).resolves.toBeUndefined();
+    await expect(avisarAlCelular(cfgCon, 9, 'nota')).resolves.toBe('fallido');
     expect(console.error).toHaveBeenCalledWith(expect.stringContaining('AVISO AL CELULAR FALLÓ'), 'caído');
   });
 });

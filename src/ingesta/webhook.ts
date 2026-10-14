@@ -3,12 +3,14 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { env, secretoPorRef } from '../config/env.js';
 import { cargarClientePorChatwootAccount, cargarClientePorSlug } from '../config/cliente.js';
 import type { ClienteConfig } from '../types/index.js';
+import { enmascararSensibles } from '../seguridad/enmascarar.js';
 import { leerAviso, type Aviso } from './aviso.js';
 import { procesarEntrante } from './procesarEntrante.js';
 import { procesarSaliente } from './procesarSaliente.js';
 import { registrarEnCurso } from './enCurso.js';
 import { procesarActualizacion } from './revisarFallo.js';
 import { esEntranteGuardable, guardarEntranteDurable } from './bandeja.js';
+import { alertarAlEquipo } from '../salida/alertaEquipo.js';
 
 /**
  * Webhooks de Chatwoot. Responden 200 al instante SIEMPRE que el aviso es legítimo (si no, Chatwoot reintenta).
@@ -78,6 +80,26 @@ async function guardarAntesDelOk(aviso: Aviso, cfgDeLaRuta: ClienteConfig | null
   }
 }
 
+/**
+ * #19: si el procesamiento de un mensaje del huésped revienta, no basta con el log: nota privada + aviso al equipo.
+ * Best-effort (sin configuración del cliente o sin Chatwoot no hay a quién avisar); el mensaje ya quedó guardado
+ * sin atender y el barrido de la bandeja lo retoma.
+ */
+async function avisarFalloDeEntrada(aviso: Aviso, cfgDeLaRuta: ClienteConfig | null, causa: unknown): Promise<void> {
+  if (aviso.direccion !== 'entrante' || aviso.privado || aviso.conversationId === null || aviso.accountId === null) return;
+  try {
+    const cfg = cfgDeLaRuta ?? await cargarClientePorChatwootAccount(aviso.accountId);
+    if (!cfg || !cfg.activo) return;
+    const motivo = causa instanceof Error ? causa.message.slice(0, 120) : 'error desconocido';
+    await alertarAlEquipo(cfg, aviso.conversationId,
+      `⚠️ El bot no pudo procesar un mensaje del huésped (${motivo}). Revisa la conversación y respóndele tú; `
+      + 'el bot volverá a intentarlo en unos minutos.\nMensaje del huésped: "' + enmascararSensibles(aviso.contenido).slice(0, 300) + '"',
+      { abrir: true });
+  } catch (e) {
+    console.error(`NO SE PUDO AVISAR EL FALLO DE ENTRADA conv=${aviso.conversationId}:`, e instanceof Error ? e.message : e);
+  }
+}
+
 async function aceptar(req: FastifyRequest, reply: FastifyReply, cfgDeLaRuta: ClienteConfig | null): Promise<FastifyReply> {
   const aviso = leerAviso(req.body);
   if ((aviso.evento === 'message_created' || aviso.evento === 'message_updated') && aviso.accountId !== null && aviso.conversationId !== null) {
@@ -85,6 +107,7 @@ async function aceptar(req: FastifyRequest, reply: FastifyReply, cfgDeLaRuta: Cl
     // Se anota como "en curso": si el cerebro se apaga, espera a que termine (ver src/apagado.ts).
     registrarEnCurso(despachar({ ...aviso, accountId: aviso.accountId }, cfgDeLaRuta).catch((e) => {
       console.error('Falló el procesamiento del aviso:', e instanceof Error ? e.message : e, (e as { cause?: unknown })?.cause);
+      return avisarFalloDeEntrada(aviso, cfgDeLaRuta, e);
     }));
   }
   return reply.code(200).send({ ok: true });
