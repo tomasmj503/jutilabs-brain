@@ -31,14 +31,36 @@ const ES = new Set([
   'puedo', 'puede', 'tiene', 'clase', 'clases', 'noche', 'noches', 'disponible', 'disponibilidad',
 ]);
 
-/** Idioma del mensaje. Con empate o sin señales se queda el actual; nunca devuelve uno no permitido. */
+/**
+ * Palabras frecuentes y distintivas de portugués, francés, alemán e italiano (el texto ya viene normalizado: sin tildes).
+ * No es un detector de idiomas completo: solo reconoce «claramente no es español ni inglés». Heurística de la Fase 1.
+ */
+const OTRO = new Set([
+  // portugués
+  'voce', 'obrigado', 'obrigada', 'nao', 'quanto', 'custa', 'quero', 'uma', 'muito', 'tem', 'preciso', 'pode', 'onde', 'diaria',
+  // francés
+  'bonjour', 'bonsoir', 'merci', 'je', 'vous', 'pour', 'une', 'quel', 'quelle', 'combien', 'chambre', 'avez', 'voudrais', 'oui', 'coute', 'est',
+  // alemán
+  'hallo', 'danke', 'ich', 'sie', 'und', 'nicht', 'haben', 'zimmer', 'wie', 'viel', 'kostet', 'bitte', 'guten', 'tag', 'mochte', 'ein', 'eine', 'ist',
+  // italiano
+  'ciao', 'grazie', 'buongiorno', 'vorrei', 'costa', 'camera', 'avete', 'favore', 'prego', 'sono', 'prenotare',
+]);
+
+/**
+ * Idioma del mensaje. Con empate o sin señales se queda el actual; nunca devuelve uno no permitido.
+ * Un texto claramente en OTRO idioma (ni es ni en) se trata como inglés (#17 / situación 06 del manual).
+ */
 export function detectarIdioma(texto: string, actual: Idioma, permitidos: Idioma[]): Idioma {
   let en = 0;
   let es = 0;
+  let otro = 0;
   for (const palabra of normalizar(texto).split(' ')) {
     if (EN.has(palabra)) en++;
     if (ES.has(palabra)) es++;
+    if (OTRO.has(palabra)) otro++;
   }
-  const detectado: Idioma = en > es ? 'en' : es > en ? 'es' : actual;
+  // «Claramente otro idioma»: al menos 2 marcas y más que las de español e inglés (una palabra suelta no cambia nada).
+  const esOtroIdioma = otro >= 2 && otro > en && otro > es;
+  const detectado: Idioma = esOtroIdioma ? 'en' : en > es ? 'en' : es > en ? 'es' : actual;
   return permitidos.includes(detectado) ? detectado : actual;
 }

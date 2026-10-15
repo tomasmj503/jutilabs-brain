@@ -34,3 +34,25 @@ describe('detectarIdioma', () => {
     expect(detectarIdioma('How much is a class?', 'es', ['es'])).toBe('es');
   });
 });
+
+// #17 / V-32 (UNI-IDIOMA): quien escribe en otro idioma (ni español ni inglés) recibe la respuesta en inglés.
+describe('detectarIdioma: otros idiomas → inglés', () => {
+  it.each([
+    ['Bonjour, combien coûte une chambre pour deux ?'],
+    ['Guten Tag, wie viel kostet ein Zimmer? Ich mochte bitte reservieren'],
+    ['Ciao, quanto costa una camera? Vorrei prenotare, grazie'],
+    ['Quanto custa a diária? Quero reservar uma vaga, obrigado'],
+  ])('«%s» → en (aunque la conversación venía en español)', (texto) => {
+    expect(detectarIdioma(texto, 'es', AMBOS)).toBe('en');
+  });
+  it('si el cliente no permite inglés, no cambia', () => {
+    expect(detectarIdioma('Bonjour, combien coûte une chambre pour deux ?', 'es', ['es'])).toBe('es');
+  });
+  it('el español y el inglés de siempre no cambian de resultado', () => {
+    expect(detectarIdioma('Hola, ¿cuánto cuesta una clase para dos personas?', 'en', AMBOS)).toBe('es');
+    expect(detectarIdioma('Do you have a room for two?', 'es', AMBOS)).toBe('en');
+  });
+  it('una palabra suelta de otro idioma dentro de un texto en español no lo cambia', () => {
+    expect(detectarIdioma('Hola, ¿tienen habitación para dos? Merci', 'es', AMBOS)).toBe('es');
+  });
+});

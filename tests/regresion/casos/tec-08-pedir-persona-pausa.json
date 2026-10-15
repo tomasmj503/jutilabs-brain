@@ -1,0 +1,20 @@
+{
+  "id": "tec-08",
+  "ref": "situación 58 / CON-PASE-1",
+  "descripcion": "pedir una persona sigue escalando: un solo mensaje al huésped, aviso al equipo y pausa (comportamiento que NO cambia en la Fase 1)",
+  "turnos": [
+    {
+      "mensajes": [
+        {
+          "texto": "quiero hablar con una persona"
+        }
+      ]
+    }
+  ],
+  "esperado": {
+    "mensajesAlHuesped": 1,
+    "pausado": true,
+    "avisosAlEquipo": 1,
+    "llamadasAlModelo": 0
+  }
+}

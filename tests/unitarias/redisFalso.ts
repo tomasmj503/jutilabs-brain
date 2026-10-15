@@ -9,6 +9,9 @@ export const redisFalso = {
     almacen.set(clave, valor);
     return 'OK';
   },
+  async get(clave: string) {
+    return almacen.get(clave) ?? null;
+  },
   async del(clave: string) {
     return almacen.delete(clave) ? 1 : 0;
   },

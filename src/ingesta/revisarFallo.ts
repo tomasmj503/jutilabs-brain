@@ -1,7 +1,7 @@
 import type { ClienteConfig } from '../types/index.js';
 import type { Aviso } from './aviso.js';
 import { desmarcarFalloAvisado, marcarFalloAvisado } from './dedup.js';
-import { consultarEstadoMensaje } from '../salida/chatwoot.js';
+import { consultarEstadoMensaje, idUsuarioBot } from '../salida/chatwoot.js';
 import { avisarMensajeFallido } from '../salida/escalamiento.js';
 
 /**
@@ -26,8 +26,16 @@ export async function procesarActualizacion(cfg: ClienteConfig, a: Aviso): Promi
     return;
   }
   if (!(await marcarFalloAvisado(cfg.id, messageId))) return; // ya se avisó de este mensaje
+  // #12: ¿lo escribió una persona del equipo o el bot? (si no se puede saber, se trata como del bot, como antes)
+  let deLaPersona = false;
   try {
-    await avisarMensajeFallido(cfg, conversationId, { error: v.error ?? a.errorExterno, contenido: v.contenido || a.contenido });
+    const botId = await idUsuarioBot(cfg);
+    deLaPersona = a.remitenteTipo === 'user' && a.remitenteId !== null && botId !== null && a.remitenteId !== botId;
+  } catch (e) {
+    console.error(`MENSAJE FALLIDO: no se pudo saber si lo escribió una persona conv=${conversationId}:`, e instanceof Error ? e.message : e);
+  }
+  try {
+    await avisarMensajeFallido(cfg, conversationId, { error: v.error ?? a.errorExterno, contenido: v.contenido || a.contenido, deLaPersona });
     console.warn(`MENSAJE FALLIDO AVISADO conv=${conversationId} mensaje=${messageId} motivo=${v.error ?? 'sin motivo'}`);
   } catch (e) {
     await desmarcarFalloAvisado(cfg.id, messageId).catch(() => undefined);

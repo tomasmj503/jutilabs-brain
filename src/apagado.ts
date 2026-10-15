@@ -2,13 +2,13 @@ import { cuantosEnCurso, esperarEnCurso } from './ingesta/enCurso.js';
 
 /**
  * Cuánto esperamos a que terminen los turnos en curso al apagar.
- * Un turno normal tarda 5 a 15 s. El peor caso realista: buffer 4 s + preparar 5 s + modelo principal
- * 25 s + modelo de respaldo 25 s + envío 10 s + notas ≈ 85 s. El candado de la conversación dura 120 s:
- * esperar más que eso no sirve. Por eso 100 s.
- * OJO: `stop_grace_period` del servicio brain en infra/docker-compose.yml DEBE ser mayor (hay una prueba
- * que lo vigila). Si se cambia este número, revisar aquello.
+ * El peor caso con el tope duro del turno (ADR-11): buffer 4 s + preparar 5 s + modelo (principal, reintento y
+ * respaldo, TODOS bajo un tope de TOPE_TURNO_MS = 90 s) + envío 10 s + nota y aviso al equipo ~10 s ≈ 119 s.
+ * Por eso 120 s. (El cálculo anterior suponía una sola llamada por modelo: 85 s, y era más corto que la realidad.)
+ * OJO: `stop_grace_period` del servicio brain en infra/docker-compose.yml DEBE ser mayor (hay una prueba que lo
+ * vigila). Si se cambia este número o TOPE_TURNO_MS, revisar aquello.
  */
-export const TOPE_APAGADO_MS = 100_000;
+export const TOPE_APAGADO_MS = 120_000;
 /** Cuánto esperamos a que el servidor deje de aceptar avisos antes de seguir de todos modos. */
 export const TOPE_CERRAR_SERVIDOR_MS = 5_000;
 

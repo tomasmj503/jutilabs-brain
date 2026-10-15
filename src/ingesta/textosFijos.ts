@@ -1,9 +1,10 @@
 import type { ClienteConfig } from '../types/index.js';
 
 const DEFECTO = {
+  // Texto del manual para el pase a persona. SIN promesas de tiempo. (La versión en inglés no está en el manual: traducción literal.)
   mensajeAcuse: {
-    es: 'Aquí sigo 🙏 Ya pasé tu consulta a nuestro equipo y te responden en cuanto puedan.',
-    en: "I'm still here 🙏 I've passed your request to our team and they'll get back to you as soon as they can.",
+    es: 'Ya compartí tu solicitud con el equipo.',
+    en: "I've shared your request with the team.",
   },
   mensajeNoEntendi: {
     es: 'No te entendí bien 🙏 ¿Me lo cuentas de otra forma? Puedo ayudarte con habitaciones, clases de yoga, café y eventos.',
@@ -20,15 +21,30 @@ const DEFECTO = {
     en: "For now I can only read text messages 🙏 Please type what you need or, if you'd rather talk to a person, write \"I want to talk to a person\" and I'll pass you to our team.",
   },
   mensajeHumano: {
-    es: 'Claro, te paso con alguien del equipo 🙏 En cuanto puedan te escriben por aquí.',
-    en: "Of course, I'm passing you to someone on our team 🙏 They'll message you here as soon as they can.",
+    es: 'Ya compartí tu solicitud con el equipo.',
+    en: "I've shared your request with the team.",
+  },
+  // Saludo del manual cuando la base no trae config_extra.saludo. (Inglés: traducción literal.)
+  saludo: {
+    es: 'Hola, me llamo Max, ¿en qué te puedo ayudar?',
+    en: "Hi, I'm Max, how can I help you?",
   },
 } as const;
 
+/**
+ * Otras claves de configExtra donde también puede venir el texto. `mensaje_escalamiento` (columna de clientes, ya
+ * cargada en configExtra.mensajeEscalamiento) es el texto propio del cliente para el pase a persona (V-25).
+ */
+const ALTERNATIVAS: Partial<Record<keyof typeof DEFECTO, readonly string[]>> = {
+  mensajeHumano: ['mensajeEscalamiento'],
+};
+
 /** Texto fijo por idioma: primero el de Supabase (configExtra.<clave>); si no existe, el de aquí. */
 export function textoFijo(cfg: ClienteConfig, clave: keyof typeof DEFECTO, idioma: string): string {
-  const m = cfg.configExtra[clave] as Record<string, unknown> | null | undefined;
-  const texto = m?.[idioma];
-  if (typeof texto === 'string' && texto.trim()) return texto;
+  for (const k of [clave, ...(ALTERNATIVAS[clave] ?? [])]) {
+    const m = cfg.configExtra[k] as Record<string, unknown> | null | undefined;
+    const texto = m?.[idioma];
+    if (typeof texto === 'string' && texto.trim()) return texto;
+  }
   return idioma === 'en' ? DEFECTO[clave].en : DEFECTO[clave].es;
 }

@@ -1,0 +1,24 @@
+{
+  "id": "tec-07",
+  "ref": "#2 / PC-11",
+  "descripcion": "pausado sin fecha de pausa tampoco se reactiva solo",
+  "conversacion": {
+    "estadoBot": "pausado",
+    "escaladoHaceHoras": null,
+    "motivo": "agente_respondio"
+  },
+  "turnos": [
+    {
+      "mensajes": [
+        {
+          "texto": "hola"
+        }
+      ]
+    }
+  ],
+  "esperado": {
+    "pausado": true,
+    "llamadasAlModelo": 0,
+    "mensajesAlHuesped": 0
+  }
+}

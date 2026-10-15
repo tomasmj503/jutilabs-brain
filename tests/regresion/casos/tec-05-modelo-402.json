@@ -1,0 +1,24 @@
+{
+  "id": "tec-05",
+  "ref": "#9 / PC-21 / UNI-LLM",
+  "descripcion": "un 402 del modelo no pausa la conversación ni le escribe «paso con el equipo» al huésped",
+  "turnos": [
+    {
+      "mensajes": [
+        {
+          "texto": "¿a qué hora es el check-in?"
+        }
+      ],
+      "modelo": {
+        "error": {
+          "status": 402
+        }
+      }
+    }
+  ],
+  "esperado": {
+    "pausado": false,
+    "llamadasAlModelo": 1,
+    "mensajesAlHuesped": 0
+  }
+}

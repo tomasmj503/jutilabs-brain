@@ -4,7 +4,8 @@ import { almacen, limpiar } from './redisFalso.js';
 vi.mock('../../src/db/redis.js', async () => ({ redis: (await import('./redisFalso.js')).redisFalso }));
 const consultar = vi.fn();
 const avisar = vi.fn();
-vi.mock('../../src/salida/chatwoot.js', () => ({ consultarEstadoMensaje: consultar }));
+const idBot = vi.fn();
+vi.mock('../../src/salida/chatwoot.js', () => ({ consultarEstadoMensaje: consultar, idUsuarioBot: idBot }));
 vi.mock('../../src/salida/escalamiento.js', () => ({ avisarMensajeFallido: avisar }));
 
 const { procesarActualizacion } = await import('../../src/ingesta/revisarFallo.js');
@@ -19,6 +20,7 @@ const fallido = { estado: 'fallido', error: '131047: Re-engagement message', con
 
 beforeEach(() => {
   limpiar(); consultar.mockReset(); avisar.mockReset(); avisar.mockResolvedValue(undefined);
+  idBot.mockReset(); idBot.mockResolvedValue(1);
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
@@ -52,7 +54,7 @@ describe('procesarActualizacion: verifica con la API (no confía en el aviso)', 
   it('la API confirma el fallo: avisa al equipo con el motivo de Meta', async () => {
     consultar.mockResolvedValue(fallido);
     await procesarActualizacion(cfg, aviso());
-    expect(avisar).toHaveBeenCalledWith(cfg, 5, { error: '131047: Re-engagement message', contenido: 'Hola' });
+    expect(avisar).toHaveBeenCalledWith(cfg, 5, { error: '131047: Re-engagement message', contenido: 'Hola', deLaPersona: true });
   });
   it('avisa UNA sola vez por mensaje aunque lleguen varios avisos', async () => {
     consultar.mockResolvedValue(fallido);
@@ -94,5 +96,25 @@ describe('procesarActualizacion: cuando no se puede saber o no se puede avisar',
     await procesarActualizacion(cfg, aviso());
     expect(avisar).toHaveBeenCalledTimes(2);
     expect(almacen.has('fallo:c1:900')).toBe(true);
+  });
+});
+
+// #12 / V-06: un mensaje fallido de una PERSONA no es lo mismo que uno del bot (no se le toca la conversación).
+describe('procesarActualizacion: distingue mensajes del bot y de una persona', () => {
+  it('lo escribió una persona (usuario distinto del bot): deLaPersona = true', async () => {
+    consultar.mockResolvedValue(fallido);
+    await procesarActualizacion(cfg, aviso({ remitenteTipo: 'user', remitenteId: 42 }));
+    expect(avisar).toHaveBeenCalledWith(cfg, 5, expect.objectContaining({ deLaPersona: true }));
+  });
+  it('lo escribió el propio bot: deLaPersona = false', async () => {
+    consultar.mockResolvedValue(fallido);
+    await procesarActualizacion(cfg, aviso({ remitenteTipo: 'user', remitenteId: 1 }));
+    expect(avisar).toHaveBeenCalledWith(cfg, 5, expect.objectContaining({ deLaPersona: false }));
+  });
+  it('si no se puede saber quién es el bot, se trata como del bot (comportamiento de antes) y avisa igual', async () => {
+    consultar.mockResolvedValue(fallido);
+    idBot.mockRejectedValue(new Error('caído'));
+    await procesarActualizacion(cfg, aviso());
+    expect(avisar).toHaveBeenCalledWith(cfg, 5, expect.objectContaining({ deLaPersona: false }));
   });
 });

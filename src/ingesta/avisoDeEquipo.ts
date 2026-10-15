@@ -26,12 +26,20 @@ const PROMESAS: readonly RegExp[] = [
   /\bequipo\b[^.!?\n]{0,25}\bcontinuara(n)?\s+(la\s+(conversacion|charla)|contigo|con\s+(tu|su)\s+(consulta|solicitud|caso|reserva|pregunta|duda|pedido))\b/,
   // "te van a escribir"
   /\b(te|le|les)\s+(va|van)\s+a\s+(escribir|contactar|llamar|confirmar|responder)\b/,
+  // "te paso con alguien del equipo", "te voy a pasar con una persona del equipo" (el texto del manual para el pase a persona)
+  /\bte\s+(paso|voy\s+a\s+pasar|pasare|pasaremos)\s+con\s+(alguien|una\s+persona|un\s+asesor|una\s+asesora|un\s+miembro|el\s+equipo|nuestro\s+equipo|la\s+recepcion)\b/,
+  // "ya compartí tu solicitud con el equipo" (frase del manual), "compartí tu consulta con el equipo"
+  /\b(comparti|compartimos)\s+(tu|su)\s+(solicitud|consulta|caso|pregunta|mensaje|duda|pedido)\s+(con|al|a)\s+(el\s+|nuestro\s+|la\s+)?(equipo|persona|recepcion)\b/,
   // "te contactarán pronto"
   /\b(te|le|les)\s+(contactara|contactaran|escribira|escribiran|llamara|llamaran|confirmara|confirmaran|respondera|responderan)\b/,
   // "se pondrá en contacto contigo"
   /\bse\s+(pondra|pondran)\s+en\s+contacto\b/,
   // Inglés: "I'll pass your question to the team", "the team will get back to you"
   /\b(i'll|i will|i am going to|i'm going to)\s+(pass|forward|send)\s+(your|this)\s+(question|request|inquiry|message|query)\b/,
+  // "I'll pass you to someone on our team", "Let me pass you to a team member"
+  /\b(i'll|i will|let me|i'm going to|i am going to)\s+(pass|connect|transfer)\s+you\s+(to|with)\b/,
+  // "I've shared your request with the team", "I shared your request with the team"
+  /\b(i've|i have|i|we've|we have|we)\s+(shared|forwarded|passed|sent)\s+(your|this)\s+(request|question|inquiry|message|query|case)\s+(with|to)\s+(the|our)\s+team\b/,
   /\b(team|someone|somebody|staff)\b[^.!?\n]{0,40}\b(will|is going to|'ll)\s+(get back|reach out|contact|be in touch|follow up|write|respond|message)\b/,
   // "A team member will continue the conversation / with your request" (pero no "the team will continue to welcome guests")
   /\b(team|someone|somebody|staff)\b[^.!?\n]{0,40}\b(will|is going to|'ll)\s+continue\s+(the\s+(conversation|chat)|with\s+(you|your)\b|helping\s+you|assisting\s+you)/,

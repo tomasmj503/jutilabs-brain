@@ -6,6 +6,7 @@ const enviarMensajeMock = vi.fn().mockResolvedValue(999);
 const enviarNotaPrivadaMock = vi.fn().mockResolvedValue(undefined);
 const marcarAbiertaMock = vi.fn().mockResolvedValue(undefined);
 const pausarBotMock = vi.fn().mockResolvedValue(undefined);
+const avisarAlCelularMock = vi.fn().mockResolvedValue('enviado');
 
 vi.mock('../../src/conversacion/almacen.js', () => ({
   guardarMensaje: guardarMensajeMock, obtenerContexto: obtenerContextoMock,
@@ -13,6 +14,8 @@ vi.mock('../../src/conversacion/almacen.js', () => ({
 vi.mock('../../src/salida/chatwoot.js', () => ({
   enviarMensaje: enviarMensajeMock, enviarNotaPrivada: enviarNotaPrivadaMock, marcarAbierta: marcarAbiertaMock,
 }));
+vi.mock('../../src/salida/avisoEquipo.js', () => ({ avisarAlCelular: avisarAlCelularMock }));
+vi.mock('../../src/conversacion/avisoPendiente.js', () => ({ registrarAvisoPendiente: vi.fn() }));
 vi.mock('../../src/conversacion/estado.js', () => ({
   pausarBot: pausarBotMock, aplicarReactivacion: vi.fn(), estaPausado: vi.fn(), guardarIdioma: vi.fn(),
 }));
@@ -31,7 +34,10 @@ const turno = {
 const cfg = { id: 'c1', idiomaDefault: 'es', configExtra: {} } as never;
 
 describe('manejarFalloDeTurno', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    avisarAlCelularMock.mockResolvedValue('enviado');
+  });
 
   it('si Supabase responde, guarda el mensaje del huésped y escala normalmente', async () => {
     obtenerContextoMock.mockResolvedValueOnce({ id: 'conv1', idioma: 'es' });
@@ -41,11 +47,25 @@ describe('manejarFalloDeTurno', () => {
     expect(pausarBotMock).toHaveBeenCalled();
   });
 
-  it('si Supabase sigue caído, igual avisa al huésped aunque no quede guardado', async () => {
+  // PC-20 / #13: si no se puede leer el estado de la conversación NO se sabe si una persona la tiene tomada:
+  // no se le escribe al huésped ni se toca la asignación; solo se avisa al equipo. (Antes esta prueba fijaba
+  // lo contrario: «igual avisa al huésped».)
+  it('si Supabase sigue caído (estado ilegible): NO le escribe al huésped; deja nota y avisa al equipo', async () => {
     obtenerContextoMock.mockRejectedValueOnce(new Error('sigue caído'));
     await manejarFalloDeTurno(cfg, turno);
     expect(guardarMensajeMock).not.toHaveBeenCalled();
-    expect(enviarMensajeMock).toHaveBeenCalled();
+    expect(enviarMensajeMock).not.toHaveBeenCalled();
+    expect(pausarBotMock).not.toHaveBeenCalled();
+    expect(enviarNotaPrivadaMock).toHaveBeenCalledWith(cfg, 1, expect.stringContaining('hola'));
+    expect(avisarAlCelularMock).toHaveBeenCalledWith(cfg, 1, expect.stringContaining('hola'));
+  });
+
+  it('si la conversación está pausada (una persona la tiene): no le escribe al huésped ni escala otra vez', async () => {
+    obtenerContextoMock.mockResolvedValueOnce({ id: 'conv1', idioma: 'es', estadoBot: 'pausado' });
+    const r = await manejarFalloDeTurno(cfg, turno);
+    expect(r).toEqual({ atendido: true });
+    expect(enviarMensajeMock).not.toHaveBeenCalled();
+    expect(pausarBotMock).not.toHaveBeenCalled();
   });
 
   it('si la falla fue un envío que no se pudo confirmar: NO manda otro mensaje al huésped, solo alerta al equipo', async () => {

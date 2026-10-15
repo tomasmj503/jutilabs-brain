@@ -1,4 +1,5 @@
 import type { TipoMensaje } from '../types/index.js';
+import { enmascararTelefono } from '../seguridad/enmascarar.js';
 
 type Obj = Record<string, unknown>;
 const o = (x: unknown): Obj => (x && typeof x === 'object' ? (x as Obj) : {});
@@ -43,7 +44,7 @@ export function leerAviso(cuerpo: unknown): Aviso {
     estado: t(c.status), errorExterno: t(o(c.content_attributes).external_error),
     adjuntos: leerAdjuntos(c.attachments),
   };
-  // TEMPORAL (prueba): qué campos llegan de verdad. El texto del huésped no se registra, solo su largo.
-  console.log(`AVISO ${JSON.stringify({ ...aviso, contenido: aviso.contenido.length })} claves=${Object.keys(c).join(',')} remitente=${Object.keys(remitente).join(',')}`);
+  // Qué campos llegan de verdad. Ni el texto del huésped (solo su largo) ni su teléfono completo (solo los 4 últimos) se registran.
+  console.log(`AVISO ${JSON.stringify({ ...aviso, contenido: aviso.contenido.length, telefono: aviso.telefono === null ? null : enmascararTelefono(aviso.telefono) })} claves=${Object.keys(c).join(',')} remitente=${Object.keys(remitente).join(',')}`);
   return aviso;
 }

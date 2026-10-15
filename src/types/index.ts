@@ -35,6 +35,8 @@ export interface ClienteConfig {
   botActivo: boolean; // kill-switch
   chatwootAccountId: number;
   chatwootTokenRef: string; // nombre de la variable de entorno
+  /** Nombre de la variable de entorno con el secreto del webhook de ESTE cliente (≥ 32 caracteres). null = aún sin configurar. */
+  chatwootWebhookSecretRef: string | null;
   idiomas: Idioma[];
   idiomaDefault: Idioma;
   zonaHoraria: string;
@@ -48,6 +50,7 @@ export interface ClienteConfig {
   llmTemperatura: number;
   openrouterKeyRef: string; // nombre de la variable de entorno, NO la clave
   limiteMensajesDiaConversacion: number;
+  /** SIN USO desde la Fase 1 (D-08): el bot ya no vuelve por tiempo, solo con la nota «#max». Se conserva por la columna. */
   reactivacionHoras: number;
   linkReservaBase: string | null; // motor FDM con hostelId, sin fechas
   configExtra: Record<string, unknown>;
@@ -102,7 +105,7 @@ export interface ContextoConversacion {
 
 export type DecisionRouter =
   | { tipo: 'ignorar'; motivo: string } // bot pausado, mensaje de agente, etc.
-  | { tipo: 'escalar'; motivo: MotivoEscalamiento; mensajeAlHuesped: string | null }
+  | { tipo: 'escalar'; motivo: MotivoEscalamiento; mensajeAlHuesped: string | null; /** Tema de la lista que lo disparó (fuera_de_alcance). */ tema?: string }
   | { tipo: 'formulario'; estado: EstadoFormulario }
   | { tipo: 'media'; tipos: TipoMensaje[] } // solo audio/imagen/ubicación, sin texto: pide que escriba y avisa al equipo
   | { tipo: 'llm' };

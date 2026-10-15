@@ -242,3 +242,32 @@ describe('promesaDePasarConsulta: "el equipo continuará…" solo con finales de
     expect(promesaDePasarConsulta(t)).toBe(false);
   });
 });
+
+// #11 / V-18 (UNI-PROMESA): las frases de pase más comunes y la del manual también activan la red de seguridad.
+describe('promesaDePasarConsulta: frases del manual y de pase directo (#11)', () => {
+  it.each([
+    ['Te paso con alguien del equipo.'],
+    ['Claro, te paso con una persona del equipo para que te ayude.'],
+    ['Te voy a pasar con el equipo.'],
+    ['Ya compartí tu solicitud con el equipo.'],
+    ['Compartí tu consulta con el equipo y te ayudan por aquí.'],
+    ['Ya pasé tu solicitud al equipo.'],
+    ["I've shared your request with the team."],
+    ['I shared your request with the team.'],
+    ["I'll pass you to someone on our team."],
+    ['Let me pass you to a team member.'],
+  ])('«%s» es una promesa', (frase) => {
+    expect(promesaDePasarConsulta(frase)).toBe(true);
+  });
+
+  it.each([
+    ['El equipo te recibe en recepción desde las 8 am.'],
+    ['¿Quieres que te pase con alguien del equipo?'],
+    ['Si quieres, te paso con el equipo.'],
+    ['Pasa por recepción para recoger la llave.'],
+    ['Te paso el link de reservas: https://ejemplo.com'],
+    ['Te comparto la información del viaje.'],
+  ])('«%s» NO es una promesa (oferta, condicional o frase normal)', (frase) => {
+    expect(promesaDePasarConsulta(frase)).toBe(false);
+  });
+});

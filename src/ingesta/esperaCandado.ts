@@ -1,5 +1,5 @@
 import { env } from '../config/env.js';
-import { conCandado } from './lock.js';
+import { conCandado, type Candado } from './lock.js';
 
 const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -11,13 +11,13 @@ const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
  */
 export async function conCandadoEsperando<T>(
   clave: string,
-  fn: () => Promise<T>,
+  fn: (candado: Candado) => Promise<T>,
   maxEsperaMs = env.LOCK_TTL_MS + 30_000,
 ): Promise<{ ok: true; valor: T } | { ok: false }> {
   const limite = Date.now() + maxEsperaMs;
   for (;;) {
     // Se envuelve el resultado: así "ocupado" (null) no se confunde con un resultado null de fn.
-    const r = await conCandado(clave, async () => ({ valor: await fn() }));
+    const r = await conCandado(clave, async (candado) => ({ valor: await fn(candado) }));
     if (r) return { ok: true, valor: r.valor };
     if (Date.now() >= limite) return { ok: false };
     await esperar(500);

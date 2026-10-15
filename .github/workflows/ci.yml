@@ -21,6 +21,36 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test --if-present
+      - name: Regresión (modelo simulado)
+        run: npm run test:regresion
 
+      # Etiqueta por commit: es la misma que se usa para desplegar y para volver atrás (infra/README.md).
       - name: Build de la imagen Docker
-        run: docker build -t jutilabs/brain:ci .
+        run: docker build -t jutilabs/brain:ci -t jutilabs/brain:${GITHUB_SHA::7} .
+
+  # Postgres y Redis REALES (y PostgREST para supabase-js). Aplica supabase/migrations/*.sql en orden.
+  integracion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Levantar Postgres, Redis y PostgREST
+        run: docker compose -f tests/integracion/docker-compose.yml up -d --wait
+
+      - name: Pruebas de integración
+        run: npm run test:integracion
+
+      - name: Logs de los servicios si algo falló
+        if: failure()
+        run: docker compose -f tests/integracion/docker-compose.yml logs --no-color
+
+      - name: Apagar servicios
+        if: always()
+        run: docker compose -f tests/integracion/docker-compose.yml down -v
