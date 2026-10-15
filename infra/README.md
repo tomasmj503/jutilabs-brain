@@ -57,3 +57,10 @@ y abrir `http://localhost:5678`. Cerrar con Ctrl+C.
 
 `caddy`, `postgres` y los dos `redis` van fijados por huella (`@sha256:…`); Chatwoot y n8n por versión en `infra/.env`.
 Actualizar es una decisión a propósito: cambiar la huella o versión, desplegar y probar.
+
+## Cambiar el Caddyfile (ojo)
+
+El `Caddyfile` entra al contenedor como archivo suelto. `git pull` lo reemplaza por un archivo nuevo y el contenedor
+sigue viendo el viejo: `caddy reload` y `caddy validate` leen la versión VIEJA sin dar error (pasó el 15-oct-2026).
+Después de cambiarlo: `docker compose up -d --no-deps --force-recreate caddy` (2-5 s sin acceso; los certificados se
+conservan en `caddy_data`) y verificar con `curl`. Todo `docker compose up` va con `--no-deps`.
