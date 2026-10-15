@@ -1,4 +1,4 @@
-# TLS automático (Let's Encrypt). Requiere DNS A de los 3 subdominios → IP del CX32 y dominio vigente.
+# TLS automático (Let's Encrypt). Requiere DNS A de los subdominios → IP del servidor y dominio vigente.
 {
   email admin@jutilabs.com
   servers {
@@ -12,20 +12,25 @@ chat.jutilabs.com {
 }
 
 n8n.jutilabs.com {
-  reverse_proxy n8n:5678
-}
-
-api.jutilabs.com {
-  # Solo lo necesario expuesto. Todo lo demás → 404.
-  @permitido path /health /webhook/*
-  handle @permitido {
-    reverse_proxy brain:8080
+  # Editor cerrado (PC-26): desde internet solo entran los webhooks de producción.
+  # El editor se usa por túnel SSH (ver docker-compose.yml, servicio n8n).
+  @webhooks path /webhook/*
+  handle @webhooks {
+    reverse_proxy n8n:5678
   }
   handle {
     respond 404
   }
 }
 
-frontier.jutilabs.com {
-  reverse_proxy frontier-api:8000
+api.jutilabs.com {
+  # Solo lo necesario expuesto. Todo lo demás → 404.
+  # /health/ready: para el monitor externo (no muestra datos de huéspedes).
+  @permitido path /health /health/ready /webhook/*
+  handle @permitido {
+    reverse_proxy brain:8080
+  }
+  handle {
+    respond 404
+  }
 }
