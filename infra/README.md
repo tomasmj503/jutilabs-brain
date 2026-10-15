@@ -44,3 +44,16 @@ La imagen del cerebro se etiqueta con el commit: `jutilabs/brain:<sha7>` (la CI 
 
 `/health/ready` es solo para el monitor externo (UptimeRobot / Healthchecks). El `HEALTHCHECK` de Docker usa `/health`:
 un aviso al equipo que no sale NO debe reiniciar el contenedor.
+
+## Editor de n8n (cerrado a internet)
+
+Desde internet `n8n.jutilabs.com` solo deja pasar `/webhook/*`; todo lo demás da 404. Para editar flujos, desde la Mac:
+
+    ssh -N -L 5678:127.0.0.1:5678 jutilabs@<IP del servidor>
+
+y abrir `http://localhost:5678`. Cerrar con Ctrl+C.
+
+## Versiones fijas
+
+`caddy`, `postgres` y los dos `redis` van fijados por huella (`@sha256:…`); Chatwoot y n8n por versión en `infra/.env`.
+Actualizar es una decisión a propósito: cambiar la huella o versión, desplegar y probar.
