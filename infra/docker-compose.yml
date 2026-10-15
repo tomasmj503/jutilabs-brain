@@ -1,9 +1,16 @@
-# Stack JUTILABS en Hetzner CX32 (8 GB / 4 vCPU). Un solo servidor, un solo compose.
+# Stack JUTILABS en Contabo. Un solo servidor, un solo compose.
 # Primer arranque: ver infra/README.md (pasos obligatorios antes de `up -d`).
 name: jutilabs
 
+x-logging: &logs
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   caddy:
+    logging: *logs
     # Versiones fijas por huella (V-31 / PC-26): la que corría el 15-oct-2026. Para actualizar: cambiar a propósito y probar.
     image: caddy:2@sha256:0c994536bddb66445885237f1a5dcc1916bccea922661c76b4e9fc24061f9b52
     restart: unless-stopped
@@ -20,6 +27,7 @@ services:
       - brain
 
   postgres:
+    logging: *logs
     # Chatwoot exige pgvector. n8n comparte la instancia con base propia (ver init-db.sh).
     image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
     restart: unless-stopped
@@ -38,6 +46,7 @@ services:
       retries: 10
 
   redis:
+    logging: *logs
     image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     restart: unless-stopped
     command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}", "--appendonly", "yes"]
@@ -55,6 +64,7 @@ services:
   #  - noeviction: si se llena, las escrituras FALLAN en vez de expulsar candados. La bandeja durable (mensajes.atendido_at)
   #    cubre esa falla: ningún mensaje se pierde sin aviso.
   redis-brain:
+    logging: *logs
     image: redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     restart: unless-stopped
     command:
@@ -78,6 +88,7 @@ services:
       REDIS_PW: ${BRAIN_REDIS_PASSWORD}
 
   chatwoot-rails:
+    logging: *logs
     image: chatwoot/chatwoot:${CHATWOOT_VERSION}
     restart: unless-stopped
     env_file: .env.chatwoot
@@ -91,6 +102,7 @@ services:
         condition: service_healthy
 
   chatwoot-sidekiq:
+    logging: *logs
     image: chatwoot/chatwoot:${CHATWOOT_VERSION}
     restart: unless-stopped
     env_file: .env.chatwoot
@@ -104,6 +116,7 @@ services:
         condition: service_healthy
 
   n8n:
+    logging: *logs
     image: n8nio/n8n:${N8N_VERSION}
     restart: unless-stopped
     # El editor ya no se publica en internet (PC-26). Se entra por túnel SSH desde la Mac:
@@ -136,6 +149,7 @@ services:
         condition: service_healthy
 
   brain:
+    logging: *logs
     build:
       context: ..
       dockerfile: Dockerfile
