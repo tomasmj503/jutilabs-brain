@@ -12,15 +12,9 @@ chat.jutilabs.com {
 }
 
 n8n.jutilabs.com {
-  # Editor cerrado (PC-26): desde internet solo entran los webhooks de producción.
-  # El editor se usa por túnel SSH (ver docker-compose.yml, servicio n8n).
-  @webhooks path /webhook/*
-  handle @webhooks {
-    reverse_proxy n8n:5678
-  }
-  handle {
-    respond 404
-  }
+  # Editor abierto desde internet (decisión 16-oct): protegido por login de
+  # n8n + doble factor obligatorio en todos los usuarios.
+  reverse_proxy n8n:5678
 }
 
 api.jutilabs.com {

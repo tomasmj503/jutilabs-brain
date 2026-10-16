@@ -38,7 +38,10 @@ La imagen del cerebro se etiqueta con el commit: `jutilabs/brain:<sha7>` (la CI 
 3. Construir con la etiqueta: `cd infra && BRAIN_TAG=<sha7> docker compose build brain`.
 4. `docker compose up -d redis-brain brain`. Humo: `curl https://api.jutilabs.com/health`; y, desde el servidor,
    `docker compose exec brain wget -qO- http://127.0.0.1:8080/health/ready` (200 = listo).
-5. **Volver atrás:** poner `BRAIN_TAG=<sha7 anterior>` y `docker compose up -d brain` (la imagen anterior sigue en el
+5. **Volver atrás:** ⚠️ si la versión a la que se vuelve es anterior a la Fase 1 (p. ej. `e089cc3`), NO conoce la ruta
+   `/webhook/chatwoot/<slug>`: ANTES de volver, regresar en Chatwoot (Configuración → Integraciones → Webhooks) la URL a
+   `/webhook/chatwoot?secret=<secreto global>`, o los mensajes se pierden. Ensayada el 15-oct-2026 (ida y vuelta 9334409 ↔ e089cc3).
+   Luego: poner `BRAIN_TAG=<sha7 anterior>` y `docker compose up -d brain` (la imagen anterior sigue en el
    servidor mientras no se haga `docker image prune`). `0002` y `0003` no hay que revertirlas: el código anterior convive
    con ellas. Si además se vuelve al Redis compartido, restaurar `REDIS_URL` anterior en el servicio `brain`.
 
@@ -57,3 +60,10 @@ y abrir `http://localhost:5678`. Cerrar con Ctrl+C.
 
 `caddy`, `postgres` y los dos `redis` van fijados por huella (`@sha256:…`); Chatwoot y n8n por versión en `infra/.env`.
 Actualizar es una decisión a propósito: cambiar la huella o versión, desplegar y probar.
+
+## Cambiar el Caddyfile (ojo)
+
+El `Caddyfile` entra al contenedor como archivo suelto. `git pull` lo reemplaza por un archivo nuevo y el contenedor
+sigue viendo el viejo: `caddy reload` y `caddy validate` leen la versión VIEJA sin dar error (pasó el 15-oct-2026).
+Después de cambiarlo: `docker compose up -d --no-deps --force-recreate caddy` (2-5 s sin acceso; los certificados se
+conservan en `caddy_data`) y verificar con `curl`. Todo `docker compose up` va con `--no-deps`.
