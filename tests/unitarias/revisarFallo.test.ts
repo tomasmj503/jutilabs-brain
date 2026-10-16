@@ -118,3 +118,29 @@ describe('procesarActualizacion: distingue mensajes del bot y de una persona', (
     expect(avisar).toHaveBeenCalledWith(cfg, 5, expect.objectContaining({ deLaPersona: false }));
   });
 });
+
+describe('procesarActualizacion: quién escribió el mensaje rechazado (#12)', () => {
+  const cfgBot = { id: 'c1', chatwootBotTokenRef: 'BOT_TOKEN' } as never;
+
+  it('modo Agent Bot: un mensaje de sender.type "agent_bot" rechazado por Meta se clasifica como del BOT, sin consultar el perfil', async () => {
+    consultar.mockResolvedValue(fallido);
+    await procesarActualizacion(cfgBot, aviso({ remitenteTipo: 'agent_bot', remitenteId: 3 }));
+    expect(avisar).toHaveBeenCalledWith(cfgBot, 5, expect.objectContaining({ deLaPersona: false }));
+    expect(idBot).not.toHaveBeenCalled();
+  });
+
+  it('modo Agent Bot: un mensaje de un usuario ("user") se clasifica como de la PERSONA, sin consultar el perfil', async () => {
+    consultar.mockResolvedValue(fallido);
+    await procesarActualizacion(cfgBot, aviso({ remitenteTipo: 'user', remitenteId: 1 }));
+    expect(avisar).toHaveBeenCalledWith(cfgBot, 5, expect.objectContaining({ deLaPersona: true }));
+    expect(idBot).not.toHaveBeenCalled();
+  });
+
+  it('modo anterior: sigue decidiendo por el id del usuario del bot (/api/v1/profile)', async () => {
+    consultar.mockResolvedValue(fallido);
+    idBot.mockResolvedValue(2); // el remitente (id 2) es el propio bot
+    await procesarActualizacion(cfg, aviso());
+    expect(idBot).toHaveBeenCalledWith(cfg);
+    expect(avisar).toHaveBeenCalledWith(cfg, 5, expect.objectContaining({ deLaPersona: false }));
+  });
+});

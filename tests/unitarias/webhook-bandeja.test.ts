@@ -22,7 +22,7 @@ const { esperarEnCurso } = await import('../../src/ingesta/enCurso.js');
 
 const cuerpo = {
   event: 'message_created', message_type: 'incoming', id: 77, content: 'ya pagué', account: { id: 1 },
-  conversation: { id: 7 }, sender: { type: 'contact', id: 5 },
+  conversation: { id: 7, status: 'pending' }, sender: { type: 'contact', id: 5 },
 };
 
 async function enviar(): Promise<number> {
@@ -73,7 +73,7 @@ describe('webhook: bandeja durable', () => {
     const app = Fastify();
     await registrarWebhookChatwoot(app);
     const promesa = app.inject({ method: 'POST', url: '/webhook/chatwoot?secret=s3', payload: cuerpo });
-    await vi.advanceTimersByTimeAsync(4_100);
+    await vi.advanceTimersByTimeAsync(1_600);
     const r = await promesa;
     expect(r.statusCode).toBe(200);
     vi.useRealTimers();

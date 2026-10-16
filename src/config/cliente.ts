@@ -21,6 +21,8 @@ function aConfig(data: FilaCliente): ClienteConfig {
     chatwootAccountId: data.chatwoot_account_id,
     chatwootTokenRef: data.chatwoot_token_ref,
     chatwootWebhookSecretRef: data.chatwoot_webhook_secret_ref ?? null,
+    chatwootBotSecretRef: data.chatwoot_bot_secret_ref ?? null,
+    chatwootBotTokenRef: data.chatwoot_bot_token_ref ?? null,
     idiomas: data.idiomas as Idioma[],
     idiomaDefault: data.idioma_default as Idioma,
     zonaHoraria: data.zona_horaria,

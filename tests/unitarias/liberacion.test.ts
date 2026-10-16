@@ -6,13 +6,14 @@ import Fastify from 'fastify';
 const reactivarBot = vi.fn();
 const limpiarAviso = vi.fn();
 const idUsuarioBot = vi.fn();
+const cambiarEstado = vi.fn();
 const nota = vi.fn();
 vi.mock('../../src/config/env.js', () => ({ env: { CHATWOOT_WEBHOOK_SECRET: 's3' }, secretoPorRef: () => 'x' }));
 vi.mock('../../src/db/supabase.js', () => ({ supabase: {} }));
 vi.mock('../../src/db/redis.js', () => ({ redis: { set: async () => 'OK' } }));
 vi.mock('../../src/conversacion/estado.js', () => ({ reactivarBot, pausarBot: vi.fn() }));
 vi.mock('../../src/conversacion/avisoPendiente.js', () => ({ limpiarAvisoPendiente: limpiarAviso, registrarAvisoPendiente: vi.fn() }));
-vi.mock('../../src/salida/chatwoot.js', () => ({ idUsuarioBot, enviarNotaPrivada: nota, enviarMensaje: vi.fn(), marcarAbierta: vi.fn() }));
+vi.mock('../../src/salida/chatwoot.js', () => ({ idUsuarioBot, cambiarEstado, enviarNotaPrivada: nota, enviarMensaje: vi.fn(), marcarAbierta: vi.fn() }));
 vi.mock('../../src/salida/avisoEquipo.js', () => ({ avisarAlCelular: vi.fn() }));
 vi.mock('../../src/ingesta/dedup.js', () => ({ yaProcesado: vi.fn(async () => false) }));
 vi.mock('../../src/ingesta/atenderTurno.js', () => ({ avisarFallo: () => () => undefined }));
@@ -58,6 +59,7 @@ describe('procesarLiberacion', () => {
   it('una persona del equipo escribe «#max» en una nota privada → el bot vuelve a estar activo', async () => {
     await procesarLiberacion(cfg, aviso());
     expect(reactivarBot).toHaveBeenCalledWith(cfg, 7);
+    expect(cambiarEstado).not.toHaveBeenCalled(); // modo anterior: solo Supabase, el estado en Chatwoot no se toca
     expect(limpiarAviso).toHaveBeenCalledWith(cfg, 7); // un aviso viejo pendiente no la vuelve a pausar
     expect(nota).toHaveBeenCalledWith(cfg, 7, expect.stringContaining('Max'));
   });
