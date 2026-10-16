@@ -13,3 +13,6 @@ coverage/
 
 # Resultados de la prueba de LLM (salidas del modelo y datos del cliente; no se suben)
 tests/prueba-llm/resultados/
+
+# Copia de seguridad local del Caddyfile (no se sube)
+infra/Caddyfile.bak
