@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../../src/config/env.js', () => ({ env: { CHATWOOT_BASE_URL: 'https://chat.test' }, secretoPorRef: () => 'token' }));
+vi.mock('../../src/config/env.js', () => ({ env: { CHATWOOT_BASE_URL: 'https://chat.test' }, secretoPorRef: (ref: string) => {
+    if (ref === 'VACIA') throw new Error(`Secreto no configurado: ${ref}`);
+    return `token-de-${ref}`;
+  },
+}));
 // Sin esperas reales: los reintentos y la pausa antes de verificar corren al instante.
 vi.mock('../../src/red/reintento.js', async (original) => {
   const m = await original<typeof import('../../src/red/reintento.js')>();
@@ -10,7 +14,7 @@ vi.mock('../../src/red/reintento.js', async (original) => {
 const { enviarMensaje } = await import('../../src/salida/chatwoot.js');
 const { EnvioIncierto, ErrorChatwoot } = await import('../../src/salida/errores.js');
 
-const cfg = { id: 'c1', chatwootAccountId: 1, chatwootTokenRef: 'T' } as never;
+const cfg = { id: 'c1', slug: 'm', chatwootAccountId: 1, chatwootTokenRef: 'T', chatwootBotTokenRef: 'B' } as never;
 const TEXTO = 'Hola, ¿en qué te ayudo?';
 
 const falloDeRed = (code: string) => Object.assign(new TypeError('fetch failed'), { cause: { code } });
@@ -22,7 +26,7 @@ const saliente = (id: number, content: string, extra: Record<string, unknown> = 
 const lista = (mensajes: unknown[]) => json({ meta: {}, payload: mensajes });
 
 let respuestas: Array<Response | Error>;
-let llamadas: Array<{ metodo: string; url: string }>;
+let llamadas: Array<{ metodo: string; url: string; token: string | undefined }>;
 
 beforeEach(() => {
   respuestas = [];
@@ -30,7 +34,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    llamadas.push({ metodo: init?.method ?? 'GET', url });
+    llamadas.push({ metodo: init?.method ?? 'GET', url, token: (init?.headers as Record<string, string> | undefined)?.['api-access-token'] });
     const siguiente = respuestas.shift();
     if (siguiente === undefined) throw new Error('la prueba se quedó sin respuestas');
     if (siguiente instanceof Error) throw siguiente;
@@ -48,6 +52,25 @@ describe('enviarMensaje: camino normal', () => {
     expect(await enviarMensaje(cfg, 5, TEXTO)).toBe(77);
     expect(envios()).toBe(1);
     expect(verificaciones()).toBe(0);
+  });
+});
+
+describe('enviarMensaje: token', () => {
+  it('el mensaje se escribe con el token del Agent Bot; la verificación (listar mensajes) usa el token de usuario', async () => {
+    respuestas = [json({ error: 'caído' }, 503), lista([saliente(90, TEXTO)])];
+    expect(await enviarMensaje(cfg, 5, TEXTO)).toBe(90);
+    expect(llamadas.map((l) => [l.metodo, l.token])).toEqual([['POST', 'token-de-B'], ['GET', 'token-de-T']]);
+  });
+  it('modo anterior (sin chatwootBotTokenRef): el mensaje se escribe con el token de usuario, como siempre', async () => {
+    const sinBot = { id: 'c1', slug: 'm', chatwootAccountId: 1, chatwootTokenRef: 'T' } as never;
+    respuestas = [creado(91)];
+    expect(await enviarMensaje(sinBot, 5, TEXTO)).toBe(91);
+    expect(llamadas.map((l) => [l.metodo, l.token])).toEqual([['POST', 'token-de-T']]);
+  });
+  it('con la ref puesta pero la variable ausente en el servidor: falla, no cae al token de usuario', async () => {
+    const huerfana = { id: 'c1', slug: 'm', chatwootAccountId: 1, chatwootTokenRef: 'T', chatwootBotTokenRef: 'VACIA' } as never;
+    await expect(enviarMensaje(huerfana, 5, TEXTO)).rejects.toThrow('Secreto no configurado: VACIA');
+    expect(llamadas).toHaveLength(0);
   });
 });
 

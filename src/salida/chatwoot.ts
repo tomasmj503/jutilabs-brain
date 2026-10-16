@@ -1,9 +1,13 @@
 import type { ClienteConfig } from '../types/index.js';
 import { env, secretoPorRef } from '../config/env.js';
+import { modoAgentBot } from '../config/agentBot.js';
 import { clasificarFalloDeRed, crearFetch, dormir, esFalloDeRed } from '../red/reintento.js';
 import { EnvioIncierto, ErrorChatwoot } from './errores.js';
 
-// Llamadas que se pueden repetir sin daño (nota interna, estado, perfil): límite de 8 s y hasta 3 intentos.
+// Llamadas que se pueden repetir sin daño (nota interna, estado, lecturas): límite de 8 s y hasta 3 intentos.
+// Escrituras (mensaje, nota, estado, asignación): token del Agent Bot si el cliente lo tiene (chatwootBotTokenRef). Lecturas
+// (listar mensajes, ver la conversación, perfil): siempre el de usuario, porque el del Agent Bot no puede listar mensajes
+// ni pedir /api/v1/profile.
 // OJO: enviar el mensaje al huésped NO usa esto (un reintento a ciegas puede duplicar el WhatsApp).
 const fetchSeguro = crearFetch({ nombre: 'chatwoot', politica: 'segura', timeoutMs: 8_000 });
 // Envío al huésped: solo se repite si el error prueba que la petición nunca salió (ej. EAI_AGAIN).
@@ -11,6 +15,15 @@ const fetchEnvio = crearFetch({ nombre: 'chatwoot-envio', politica: 'solo-si-no-
 
 const ESPERA_ANTES_DE_VERIFICAR_MS = 2_000; // deja terminar a Chatwoot si seguía procesando el envío
 const TOLERANCIA_RELOJ_MS = 1_500;
+
+/**
+ * Token con el que se ESCRIBE en Chatwoot (mensaje, nota, estado, asignación). Con chatwootBotTokenRef, el del Agent Bot;
+ * sin él, el de usuario de siempre. Si la ref existe pero la variable no, falla (no cae al de usuario a escondidas: los
+ * mensajes saldrían como de una "persona" y el bot se pausaría a sí mismo).
+ */
+function tokenDeEscritura(cfg: ClienteConfig): string {
+  return secretoPorRef(modoAgentBot(cfg) ? cfg.chatwootBotTokenRef! : cfg.chatwootTokenRef);
+}
 
 async function llamarChatwoot(
   cfg: ClienteConfig,
@@ -26,7 +39,7 @@ async function llamarChatwoot(
     method: 'POST',
     headers: {
       // Con guion, no guion bajo: Caddy descarta los encabezados con guion bajo.
-      'api-access-token': secretoPorRef(cfg.chatwootTokenRef),
+      'api-access-token': tokenDeEscritura(cfg),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(cuerpo),
@@ -182,8 +195,12 @@ export async function enviarNotaPrivada(cfg: ClienteConfig, conversationId: numb
 type Asignado = { tipo: 'nadie' } | { tipo: 'bot' } | { tipo: 'persona'; id: number } | { tipo: 'desconocido' };
 
 /**
- * Quién tiene asignada la conversación (GET de la conversación → meta.assignee; S-05: formato por confirmar en
- * Chatwoot 4.17.0). Cualquier duda devuelve 'desconocido': quien llama NO debe desasignar a nadie.
+ * Quién tiene asignada la conversación (GET de la conversación → meta.assignee; S-05).
+ *  - Modo Agent Bot (formato verificado en Chatwoot 4.17.0): el bot es un asignado propio, `meta.assignee_type: 'AgentBot'`,
+ *    con un id de OTRA tabla que la de usuarios; el tipo manda y el id solo se usa para las personas. Sin asignado la
+ *    clave `assignee` ni viene.
+ *  - Modo anterior: el bot es un usuario más; se reconoce porque su id es el del dueño del token (/api/v1/profile).
+ * Cualquier duda devuelve 'desconocido': quien llama NO debe desasignar a nadie.
  */
 async function leerAsignado(cfg: ClienteConfig, conversationId: number): Promise<Asignado> {
   try {
@@ -192,7 +209,15 @@ async function leerAsignado(cfg: ClienteConfig, conversationId: number): Promise
       headers: { 'api-access-token': secretoPorRef(cfg.chatwootTokenRef) },
     });
     if (!r.ok) return { tipo: 'desconocido' };
-    const meta = ((await r.json()) as { meta?: { assignee?: { id?: unknown } | null } } | null)?.meta;
+    const meta = ((await r.json()) as { meta?: { assignee?: { id?: unknown } | null; assignee_type?: unknown } } | null)?.meta;
+    if (modoAgentBot(cfg)) {
+      if (!meta || typeof meta !== 'object') return { tipo: 'desconocido' };
+      if (meta.assignee === null || meta.assignee === undefined) return { tipo: 'nadie' };
+      if (meta.assignee_type === 'AgentBot') return { tipo: 'bot' };
+      const id = meta.assignee.id;
+      if (meta.assignee_type !== 'User' || typeof id !== 'number') return { tipo: 'desconocido' };
+      return { tipo: 'persona', id };
+    }
     if (!meta || !('assignee' in meta)) return { tipo: 'desconocido' };
     if (meta.assignee === null || meta.assignee === undefined) return { tipo: 'nadie' };
     const id = meta.assignee.id;
@@ -206,15 +231,21 @@ async function leerAsignado(cfg: ClienteConfig, conversationId: number): Promise
   }
 }
 
+/** Cambia el estado de la conversación en Chatwoot (con el token de escritura del cliente). Lanza si Chatwoot lo rechaza. */
+export async function cambiarEstado(cfg: ClienteConfig, conversationId: number, estado: 'open' | 'pending'): Promise<void> {
+  await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: estado }, fetchSeguro);
+}
+
 /**
- * Deja la conversación "abierta" para que todo el equipo la vea. Chatwoot la asigna a quien la abre (aquí el propio
- * bot: "self-assigned"), y así quedaba fuera de "Mine" y "Unassigned" de las personas del equipo; por eso, si la tiene
- * asignada EL BOT, después de abrirla se desasigna con `assignee_id: 0` (verificado en Chatwoot 4.17.0).
+ * Deja la conversación "abierta" para que todo el equipo la vea. Si queda asignada AL BOT, se desasigna con
+ * `assignee_id: 0` (verificado en Chatwoot 4.17.0) para que no quede fuera de "Mine" y "Unassigned". Antes el bot se
+ * asignaba solo al abrirla ("self-assigned"); con el token del Agent Bot, abrir una conversación "pending" ya se la quita
+ * (handoff de Chatwoot) y esta llamada es solo la red de seguridad.
  * #12 / PC-20: si la tiene una PERSONA, o no se puede saber, NO se toca la asignación: escalar nunca le quita la
  * conversación a quien la está atendiendo. Si desasignar al bot falla se lanza el error para que quien llama reintente.
  */
 export async function marcarAbierta(cfg: ClienteConfig, conversationId: number): Promise<void> {
-  await llamarChatwoot(cfg, conversationId, 'toggle_status', { status: 'open' }, fetchSeguro);
+  await cambiarEstado(cfg, conversationId, 'open');
   const asignado = await leerAsignado(cfg, conversationId);
   if (asignado.tipo === 'bot') {
     await llamarChatwoot(cfg, conversationId, 'assignments', { assignee_id: 0 }, fetchSeguro);
@@ -227,7 +258,10 @@ export async function marcarAbierta(cfg: ClienteConfig, conversationId: number):
 
 const idsDelBot = new Map<string, number>();
 
-/** Id del usuario "bot" en Chatwoot (dueño del token). Se consulta una vez y se recuerda. */
+/**
+ * Id del usuario de Chatwoot dueño del token de USUARIO (GET /api/v1/profile; el token del Agent Bot no puede). Solo lo usa
+ * el MODO ANTERIOR (clientes sin chatwootBotTokenRef); en modo Agent Bot el bot se reconoce por sender.type "agent_bot".
+ */
 export async function idUsuarioBot(cfg: ClienteConfig): Promise<number | null> {
   const guardado = idsDelBot.get(cfg.id);
   if (guardado !== undefined) return guardado;

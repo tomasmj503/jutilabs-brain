@@ -21,7 +21,7 @@ const { esperarEnCurso } = await import('../../src/ingesta/enCurso.js');
 
 const cuerpo = {
   event: 'message_created', message_type: 'incoming', id: 77, content: 'ya pagué 4111 1111 1111 1111', account: { id: 1 },
-  conversation: { id: 7 }, sender: { type: 'contact', id: 5 },
+  conversation: { id: 7, status: 'pending' }, sender: { type: 'contact', id: 5 },
 };
 
 beforeEach(() => {

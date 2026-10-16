@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // PC-10 (UNI-PUERTA): si la pausa falla, o no se puede saber quién escribió, NO se calla: alerta al equipo.
 const pausarBot = vi.fn();
 const idUsuarioBot = vi.fn();
+const cambiarEstado = vi.fn();
 const alertar = vi.fn();
 const pendiente = vi.fn();
 vi.mock('../../src/config/env.js', () => ({ env: {}, secretoPorRef: () => 'x' }));
@@ -13,7 +14,7 @@ vi.mock('../../src/conversacion/almacen.js', () => ({
   obtenerContexto: async () => ({ id: 'conv1', idioma: 'es' }), guardarMensaje: async () => undefined,
 }));
 vi.mock('../../src/conversacion/avisoPendiente.js', () => ({ registrarAvisoPendiente: pendiente }));
-vi.mock('../../src/salida/chatwoot.js', () => ({ idUsuarioBot, enviarMensaje: vi.fn(), enviarNotaPrivada: vi.fn(), marcarAbierta: vi.fn() }));
+vi.mock('../../src/salida/chatwoot.js', () => ({ idUsuarioBot, cambiarEstado, enviarMensaje: vi.fn(), enviarNotaPrivada: vi.fn(), marcarAbierta: vi.fn() }));
 vi.mock('../../src/salida/avisoEquipo.js', () => ({ avisarAlCelular: vi.fn() }));
 vi.mock('../../src/salida/alertaEquipo.js', async () => ({
   alertarAlEquipo: alertar,
@@ -51,6 +52,16 @@ describe('procesarSaliente', () => {
     await procesarSaliente(cfg, persona);
     expect(pausarBot).toHaveBeenCalledWith(cfg, 7, 'agente_respondio');
     expect(alertar).not.toHaveBeenCalled();
+  });
+
+  it('modo anterior (sin chatwootBotTokenRef): una persona responde → solo se pausa, NO se cambia el estado en Chatwoot', async () => {
+    await procesarSaliente(cfg, persona);
+    expect(cambiarEstado).not.toHaveBeenCalled();
+  });
+
+  it('modo anterior: un sender.type "agent_bot" no se trata como caso especial (solo cuenta quien sea "user" y no el bot)', async () => {
+    await procesarSaliente(cfg, { ...(persona as object), remitenteTipo: 'agent_bot', remitenteId: 3 } as never);
+    expect(pausarBot).not.toHaveBeenCalled();
   });
 
   it('idUsuarioBot lanza: no se calla, alerta («el bot NO se pausó») y no lanza', async () => {

@@ -1,6 +1,7 @@
 import type { ClienteConfig } from '../types/index.js';
 import type { Aviso } from './aviso.js';
 import { desmarcarFalloAvisado, marcarFalloAvisado } from './dedup.js';
+import { modoAgentBot } from '../config/agentBot.js';
 import { consultarEstadoMensaje, idUsuarioBot } from '../salida/chatwoot.js';
 import { avisarMensajeFallido } from '../salida/escalamiento.js';
 
@@ -28,11 +29,16 @@ export async function procesarActualizacion(cfg: ClienteConfig, a: Aviso): Promi
   if (!(await marcarFalloAvisado(cfg.id, messageId))) return; // ya se avisó de este mensaje
   // #12: ¿lo escribió una persona del equipo o el bot? (si no se puede saber, se trata como del bot, como antes)
   let deLaPersona = false;
-  try {
-    const botId = await idUsuarioBot(cfg);
-    deLaPersona = a.remitenteTipo === 'user' && a.remitenteId !== null && botId !== null && a.remitenteId !== botId;
-  } catch (e) {
-    console.error(`MENSAJE FALLIDO: no se pudo saber si lo escribió una persona conv=${conversationId}:`, e instanceof Error ? e.message : e);
+  if (modoAgentBot(cfg)) {
+    // Modo Agent Bot: persona = usuario de Chatwoot; lo del bot sale como sender.type "agent_bot". Sin consultar el perfil.
+    deLaPersona = a.remitenteTipo === 'user' && a.remitenteId !== null;
+  } else {
+    try {
+      const botId = await idUsuarioBot(cfg);
+      deLaPersona = a.remitenteTipo === 'user' && a.remitenteId !== null && botId !== null && a.remitenteId !== botId;
+    } catch (e) {
+      console.error(`MENSAJE FALLIDO: no se pudo saber si lo escribió una persona conv=${conversationId}:`, e instanceof Error ? e.message : e);
+    }
   }
   try {
     await avisarMensajeFallido(cfg, conversationId, { error: v.error ?? a.errorExterno, contenido: v.contenido || a.contenido, deLaPersona });

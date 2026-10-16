@@ -36,7 +36,7 @@ const { esperarEnCurso } = await import('../../src/ingesta/enCurso.js');
 
 const cuerpo = (accountId: number) => ({
   event: 'message_created', message_type: 'incoming', id: 9, content: 'hola',
-  account: { id: accountId }, conversation: { id: 7 }, sender: { type: 'contact', id: 5 },
+  account: { id: accountId }, conversation: { id: 7, status: 'pending' }, sender: { type: 'contact', id: 5 },
 });
 
 async function llamar(url: string, accountId: number, encabezados: Record<string, string> = {}) {

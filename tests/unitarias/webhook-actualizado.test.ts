@@ -15,7 +15,7 @@ const { registrarWebhookChatwoot } = await import('../../src/ingesta/webhook.js'
 const { esperarEnCurso } = await import('../../src/ingesta/enCurso.js');
 
 const cuerpo = (extra: Record<string, unknown>) => ({
-  event: 'message_created', message_type: 'incoming', id: 1, content: 'hola', account: { id: 1 }, conversation: { id: 7 }, sender: { type: 'contact', id: 5 }, ...extra,
+  event: 'message_created', message_type: 'incoming', id: 1, content: 'hola', account: { id: 1 }, conversation: { id: 7, status: 'pending' }, sender: { type: 'contact', id: 5 }, ...extra,
 });
 async function enviar(body: unknown, secreto = 's3') {
   const app = Fastify();

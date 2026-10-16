@@ -37,6 +37,10 @@ export interface ClienteConfig {
   chatwootTokenRef: string; // nombre de la variable de entorno
   /** Nombre de la variable de entorno con el secreto del webhook de ESTE cliente (≥ 32 caracteres). null = aún sin configurar. */
   chatwootWebhookSecretRef: string | null;
+  /** Variable de entorno con el secreto del Agent Bot: firma HMAC de sus avisos (X-Chatwoot-Signature). Ausente/null = aún sin configurar. */
+  chatwootBotSecretRef?: string | null;
+  /** Variable de entorno con el token del Agent Bot: con él se ESCRIBE en Chatwoot (mensajes, notas, estado, asignación). Ausente/null = no se puede escribir. */
+  chatwootBotTokenRef?: string | null;
   idiomas: Idioma[];
   idiomaDefault: Idioma;
   zonaHoraria: string;

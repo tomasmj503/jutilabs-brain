@@ -19,6 +19,8 @@ export interface Aviso {
   evento: string | null; direccion: 'entrante' | 'saliente' | null; privado: boolean;
   messageId: number | null; conversationId: number | null; accountId: number | null;
   contactId: number | null; telefono: string | null;
+  /** conversation.status del aviso (pending | open | resolved | snoozed). Solo se atiende el huésped en 'pending'. */
+  estadoConversacion: string | null;
   remitenteTipo: string | null; remitenteId: number | null; contenido: string;
   /** Estado del mensaje si el aviso lo trae (sent | delivered | read | failed). En Chatwoot 4.17.0 puede venir vacío. */
   estado: string | null;
@@ -40,6 +42,7 @@ export function leerAviso(cuerpo: unknown): Aviso {
     messageId: n(c.id), conversationId: n(conv.id), accountId: n(o(c.account).id),
     contactId: n(meta.id) ?? (remitente.type === 'contact' ? n(remitente.id) : null),
     telefono: tel?.replace(/\D/g, '') || null,
+    estadoConversacion: t(conv.status),
     remitenteTipo: t(remitente.type), remitenteId: n(remitente.id), contenido: t(c.content) ?? '',
     estado: t(c.status), errorExterno: t(o(c.content_attributes).external_error),
     adjuntos: leerAdjuntos(c.attachments),
